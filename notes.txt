@@ -134,9 +134,10 @@ On va regarder au cas par cas.
 Si mx = Deref, let mx in m = Deref par la remarque précédente
 4.2
 Si mx = Guarded, alors m = Guarded.
-TODO : mauvais exemple à réécrire.
-Exemple : let z = (let x = 1 :: z in 2 :: x). Il me parait clair que z
-est utilisé en mode Guarded.
+
+Exemple : let z = 2 :: (let x = z in 2 :: x).
+Il me parait clair que z est utilisé en mode Guarded.
+
 4.3
 Si mx = Delayed, il me semble que let mx in m = Guarded.
     
@@ -170,18 +171,6 @@ let z = K(let x = f z in fun() -> x) serait acceptée, alors qu'on
 aurait besoin de déréférencer z pour évaluer cette expression.
 
 Poser let mx in m = Guarded me parait le choix le plus raisonable.
-
-(TODO : compléter ou supprimer cette remarque).
-Dans le système de Jérémy, on a... rien qui nous permette de trancher entre
-Guarded et Delayed. (Serait-il possible de modifier le système de Jérémy
-pour qu'il soit compatible avec notre proposition de système ?).
-
-Γ |- z: Unguarded
-Γ' |- fun() -> x: 
----
-Γ |- let x = z in fun() -> x:
----
-z: (z -> Unguarded) |- K(let x = z in fun() -> x):
 
 4.4
 Si mx = Unused, alors let mx in m = Guarded.
@@ -222,9 +211,6 @@ Si on prend e[z] = z, alors on a z: let mx in m |- let mx in m, donc
 z: let mx in m |- let x = z in x: Unguarded.
 Cette définition récursive devant être refusée par le compilateur, il nous
 faut donc que let mx in m soit égal à Deref ou Unguarded.
-
-Update : cette expression pourrait être refusée par le compilateur pour des
-raisons de taille statique/dynamique.
 
 Or, il ne faut pas que let mex in m soit égal à Deref, cela reviendrait à
 refuser l'expression lorsque e[z] = 1 :: z.
@@ -336,3 +322,16 @@ Cas de match ... with, en supposant que tous les patterns sont destructifs :
 Γ |- e: m[Deref]
 ---
 |- match e with p1 -> e1 | ... | pn -> en: m
+
+27/06/2018 :
+
+On peut donner une expression plus simple de let ... in ... que le tableau.
+Il nous suffit de dire que :
+let mx in m = m[mx + Guarded]
+
+De plus, si on a un pattern destructif, on remplace le tout par :
+m[mx + Deref] = m[Deref].
+
+Ça veut dire qu'il nous faudrait plutôt définir un opérateur :
+let mx in m with mode m,
+avec m = Guarded si le pattern est destructif, m = Deref sinon.
