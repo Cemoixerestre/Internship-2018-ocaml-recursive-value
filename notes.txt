@@ -1,0 +1,338 @@
+Notre système :
+
+Règles de déduction de la forme :
+
+Γ |- e: m
+
+avec e une expression, m un mode, Γ un environnement.
+Γ est la fonction qui associe à chacune des variables libres de e le mode
+dans lequel elle doit être utilisée pour que e soit utilisée dans le mode m.
+
+m est l'entrée, Γ est la sortie.
+
+L'idée serait que pour chaque expression de la forme
+let rec x1 = e1 and ... and xn = en (in e)? qui apparait dans l'arbre, on
+calcule les environnements :
+Γi |- ei: Unguarded
+et qu'on vérifie que les variables x1, ..., xn sont utilisée en mode
+Guarded, Delayed ou Unused dans les environnements Γ1, ..., Γn.
+
+Je pense que ceci pourrait être étendu, en ne vérifiant qu'une seule fois
+l'expression.
+L'idée serait qu'à chaque let rec, on type l'expression ainsi :
+
+Γ1 |- e1: Unguarded
+...
+Γn |- en: Unguarded
+(règle pour e)?
+-------------------
+... |- let rec ...: m
+
+En même temps qu'on calcule les environnements Γ1, ..., Γn, on vérifie la bonne
+utilisation des variables x1, ..., xn.
+
+Ça permetrait de n'effectuer le calcul qu'une seule fois pour toute une
+expression, et d'éviter de faire plusieurs fois les mêmes calculs pour les
+mêmes let rec imbriqués.
+
+Pour l'instant, le type-checker d'OCaml ne fonctionnant pas ainsi, on ne s'en
+préoccupera pas.
+
+Joindre des environnements :
+
+On peut classer les modes du plus fort au plus faible :
+Deref > Unguarded > Guarded > Delayed > Unused
+
+On définit alors pour deux environnements Γ1 et Γ2 :
+(Γ1 + Γ2): x -> max(Γ1(x), Γ2(x))
+
+Composition d'environnements :
+Si une expression e est utilisée dans l'expression e' avec le mode m', laquelle
+est utilisée avec le mode m, dans quel mode est utilisée e ?
+On dit que e est utilisée dans le mode m[m'].
+
+Définition actuelle :
+Si m € {Deref, Unguarded, Guarded, Delayed}
+et m' & {Deref, Guarded, Delayed} :
+Delayed[m'] = Delayed
+Deref[m'] = Deref
+Guarded[m'] = m'
+Unguarded[m'] = m'
+
+On remarque donc que m[m'] prend ses valeurs parmi {Deref, Guarded, Delayed}.
+
+Cela nous donne les premières règles de déduction :
+
+---------
+ø |- c: m
+
+------------
+x: m |- x: m
+
+Γ1 |- e1: m[Deref]
+Γ2 |- e2: m[Deref]
+-------------------
+Γ1 + Γ2 |- e1 e2: m
+
+Γ, x: m' |- e: m[Delayed]
+-------------------------
+Γ |- (fun x -> e): m
+
+Γ1 |- e1: m[Guarded]
+...
+Γ2 |- en: m[Guarded]
+-----------------------------------
+Γ1 + ... + Γn |- K(e1, ..., en): m
+
+Le cas des règles let et let rec :
+
+d'après Gabriel, la règle pour let devrait être la suivante :
+
+Γ1 |- e1: let mx in m
+Γ2, x: mx |- e2: m
+---------------------------
+Γ1 + Γ2 |- let x = e1 in e2
+
+la question est la suivante : quel est le mode let mx in m ?
+
+1- Si m = Delayed :
+
+On veut avoir la règle suivante : si Γ |- e: Delayed, alors pour toute variable
+libre x de e, Γ(x) = Delayed.
+
+Pour que cette règle soit respectée dans le cas de let, il nous faut donc :
+let mx in m = Delayed.
+
+2- Si m = Deref :
+
+Similairement, on veut que si Γ |- e: Deref, alors pour toute variable libre de
+e, Γ(x) = Deref.
+
+Il nous faut donc, let mx in Delayed = Deref.
+
+3- Si mx = Deref :
+Si on réfléchit, lorsqu'on a besoin de connaitre la valeur de notre
+let ... in ..., on va d'abord « évaluer » e1, mettre le résultat en e2, puis
+« évaluer » e2.
+
+Je met « évaluer » entre guillemets puisqu'on n'a pas forcément besoin de
+déréférencer les variables de e1.
+
+Par exemple, l'expression suivante est acceptée :
+let rec z = (let x = z in 1 :: x);;
+
+Si l'expression z dans let x = z in ... nécessitait que les variables soient
+déréférencées, cette expression ne serait pas compilée.
+
+En revanche, cette remarque ne s'applique pas si mx = Deref.
+On peut donc ajouter : let mx in m = Deref.
+
+4- Si m = Guarded :
+On va regarder au cas par cas.
+
+4.1
+Si mx = Deref, let mx in m = Deref par la remarque précédente
+4.2
+Si mx = Guarded, alors m = Guarded.
+TODO : mauvais exemple à réécrire.
+Exemple : let z = (let x = 1 :: z in 2 :: x). Il me parait clair que z
+est utilisé en mode Guarded.
+4.3
+Si mx = Delayed, il me semble que let mx in m = Guarded.
+    
+Exemple :
+type foo = K of (unit -> foo);;
+let rec z = K(let x = z in fun() -> x)
+
+On a bien m = Guarded et mx = Delayed.
+
+L'expression e[z] est évaluée, puis placée en en x, puis fun() -> x est
+évaluée.
+
+Si on type l'expression, on a :
+z: let mx in m |- z: let mx in m
+x: Delayed |- fun() -> x
+--------------------------------------------------
+z: let mx in m |- let x = z in fun() -> x: Guarded
+-------------------------------------------------------
+z: let mx in m |- K(let x = z in fun() -> x): Unguarded
+
+Il me semble que l'on évalue d'abord x = z, que x est en gros un pointeur
+pointant vers les données de z, que même si x l'experssion x est en mode
+Delayed dans fun() -> x, x a déjà été évaluée. Comme tout est placé dans un
+constructeur, z est Guarded.
+
+Poser let mx in m = Guarded est cohérent avec le système actuel de typage.
+Poser let mx in m = Unguarded ne l'est pas, puisque cette expression serait
+rejetée.
+Poser let mx in m = Delayed ne l'est pas, puisqu'un experssion de la forme
+let z = K(let x = f z in fun() -> x) serait acceptée, alors qu'on
+aurait besoin de déréférencer z pour évaluer cette expression.
+
+Poser let mx in m = Guarded me parait le choix le plus raisonable.
+
+(TODO : compléter ou supprimer cette remarque).
+Dans le système de Jérémy, on a... rien qui nous permette de trancher entre
+Guarded et Delayed. (Serait-il possible de modifier le système de Jérémy
+pour qu'il soit compatible avec notre proposition de système ?).
+
+Γ |- z: Unguarded
+Γ' |- fun() -> x: 
+---
+Γ |- let x = z in fun() -> x:
+---
+z: (z -> Unguarded) |- K(let x = z in fun() -> x):
+
+4.4
+Si mx = Unused, alors let mx in m = Guarded.
+
+Raisons :
+il nous faut refuser l'expression :
+let rec z = Some(let x = do_something_with z in 1).
+On ne peut donc pas avoir let mx in m <= Delayed
+
+Par croissance (à définir), on doit donc avoir let mx in m = Guarded.
+
+4.5
+Je pense qu'on n'a pas besoin de définir le cas mx = Unguarded.
+
+Il nous faudrait définir notre système de telle sorte que si
+Γ |- e: Guarded, alors pour toute variable libre x de e, Γ(x) ≠ Unguarded.
+
+5- Si m = Unguarded
+Encore une disjonction de cas :
+
+5.1 - Si mx = Deref
+Par la remarque 3, let mx in m = Unguarded
+
+5.2 - Si mx = Unguarded
+On a let mx in m = Unguarded.
+
+Exemple :
+let rec z = (let x = e[z] in x)
+
+Si on effectue le test, on a les dérivations :
+
+z: m' |- e[z]: let mx in m
+x: Unguarded |- x: Unguarded
+-------------------------------------
+z: m' |- let x = e[z] in x: Unguarded
+
+Si on prend e[z] = z, alors on a z: let mx in m |- let mx in m, donc
+z: let mx in m |- let x = z in x: Unguarded.
+Cette définition récursive devant être refusée par le compilateur, il nous
+faut donc que let mx in m soit égal à Deref ou Unguarded.
+
+Update : cette expression pourrait être refusée par le compilateur pour des
+raisons de taille statique/dynamique.
+
+Or, il ne faut pas que let mex in m soit égal à Deref, cela reviendrait à
+refuser l'expression lorsque e[z] = 1 :: z.
+
+Update : cette expression est actuellement refusée par le compilateur, il me
+faut enquêter dessus.
+
+Update : comme il me semblait, cette expression est refusée puisque le
+compilateur considère que la taille de l'expression n'est pas connue à la
+compilation.
+
+Plus généralement, les seules expressions de cette forme autoriée sont les
+expressions avec e[z] = a, et a l'identificateur d'une variable dont la taille
+est considérée comme connue.
+
+Je pense donc qu'il faut avoir let mx in m = Unguarded pour des raisons de
+cohérence, c'est-à-dire que le résultat de test récursif pour de Jeremy doit
+être le même que pour notre check recursif, à définiton de
+Guarded/Delayed/Unused près.
+
+5.3- mx = Guarded
+Je crois que rien ne nous empêche de poser let mx in m = Guarded.
+
+Exemple :
+let rec z = (let x = e1[z] in 1 :: x)
+
+5.4- mx = Delayed
+
+Exemple (avec l'option -rectypes) :
+let rec z = (let x = z in fun() -> x)
+
+Comme l'exemple précédent, je poserais let mx in m = Guarded, et ça devrait
+être bon. Cependant, j'ai quelques scrupules. En effet, comme on observe dans
+l'exemple précédent, e1 = z est évalué dans le mode Guarded alors qu'aucun
+constructeur n'intervient.
+
+Cela veut dire qu'il faut peut-être changer notre définition de Guarded.
+
+En effet, intuitivement, si l'on évalue e1 en mode Guarded, ce n'est pas parce
+que e1 va être placé dans un constructeur, c'est parce qu'on ne fait pas
+référérence aux variables de portée supérieures directement comme ce serait
+le cas avec let x = z in x, on n'accède pas directement à ces variables.
+
+D'un autre côté, e1 est évalué avant e2 qui l'est en Unguarded, e1 ne peut
+donc pas être évalué en mode Delayed.
+
+De plus, c'est le seul choix cohérent possible si l'on tient à ce que
+let ... in ... soit une fonction croissante.
+
+5.5- mx = Unused
+
+Pour un peu les mêmes raisons, je définirais let mx in m = Guarded, avec les
+mêmes réserves.
+
+Tableau récapitulatif :
+
+let mx in m -> | Deref     | Unguarded | Guarded   | Delayed   |
+    |          |           |           |           |           |
+    v          |           |           |           |           |
+--------------- ----------- ----------- ----------- -----------
+Deref          | Deref     | Deref     | Deref     |     /     |
+--------------- ----------- ----------- ----------- -----------
+Unguarded      |     /     | Unguarded |     /     |     /     |
+--------------- ----------- ----------- ----------- -----------
+Guarded        |     /     | Guarded   | Guarded   |     /     |
+--------------- ----------- ----------- ----------- -----------
+Delayed        |     /     | Guarded   | Guarded   | Delayed   |
+--------------- ----------- ----------- ----------- -----------
+Unused         | Deref     | Guarded   | Guarded   | Delayed   |
+--------------- ----------- ----------- ----------- -----------
+
+Cela nous donne (enfin !) une fonction let ... in ..., elle est presque
+continue, c'est-à-dire continue sur tout son intervalle de définition. On
+peut s'amuser à étendre cette fonction, mais on aurait des cas qui n'auraient
+pas beaucoup de sens.
+
+Remarque esthétique : on perd un peu en simplicité.
+
+Règle let rec ?
+
+Γ1, x: _ |- e1: let mx in m
+Γ2, x: mx |- e2: m
+---
+|- let rec x = e1 in e2: ms
+
+est-ce que ça convient ? Je ne vois pas d'objection. Un let a le même effet
+qu'un let rec sur les variables de portée supérieure. La seule différence est
+que x doit être bien formée, mais ce test est effectué récursivement, on ne
+s'en préoccupe pas.
+
+L'extension pour let rec ... and ... est directe :
+
+Γ1, x1: _, ..., xn: _ |- e1: let mx1 in m
+...
+Γn, x1: _, ..., xn: _ |- en: let mxn in m
+Γ, x1: mx1, ..., xn: mxn |- e: m
+----------------------------------------------------------------
+Γ1 + ... + Γn + Γ |- let rec x1 = e1 and ... and xn = en in e: m
+
+Remarque : si on a let p = e, avec p un pattern detructif (pas dans un let rec,
+ceci est actuellement refusé par le compilateur), ne suffit-il pas de calculer
+Γ1 dans le contexte Deref ?
+
+Cas de match ... with, en supposant que tous les patterns sont destructifs :
+
+Γ1, {x: _, x € fv(p1)} |- e1: m?
+...
+Γn, {x: _, x € fv(pn)} |- en: m?
+Γ |- e: m[Deref]
+---
+|- match e with p1 -> e1 | ... | pn -> en: m
