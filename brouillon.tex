@@ -1,0 +1,50 @@
+\documentclass{article}
+
+\usepackage[utf8]{inputenc}
+\usepackage[french]{babel}
+
+\title{}
+\author{Alban Reynaud}
+\date{}
+
+\begin{document}
+
+\maketitle
+
+\section*{Présentation}
+
+\subsection*{Modes}
+On part sur 5 modes (pour les expressions/variables ?) :
+\begin{description}
+  \item[Deref] : se dit d'une expression ou d'une variable qui est évaluée pour être utilisée. Par exemple, dans \verb~e + 1~, \verb&e& est déréférencée. Toutes les variables intervenant dans une expression déréférencée le sont également.
+  \item[Delayed] : se dit d'une expression qui n'est pas évaluée immédiatement, ou d'une variable dont l'expression n'est pas évaluée immédiatement. Par exemple, dans \verb~fun () -> e~, l'évaluation de \verb&e& est retardée (\textit{delayed}).
+  \item[Guarded] : se dit d'une expression ou d'une variable placée dans un constructeur. Par exemple, dans \verb&Some(e)&, \verb&e& est gardée.
+  \item[Unused] : se dit d'une variable non utilisée dans une expression.
+  \item[Unguarded] : plus difficile à définir. L'idée est que dans :
+    \begin{verbatim}
+      let (rec?) x =  e in e'
+    \end{verbatim}
+    la variable \verb~x~ venant d'être crée n'est ni placée dans un constructeur, ni encore évaluée, son évaluation n'est pas non plus délayée. La variable est dite non gardée. (TODO : définir pour les expressions).
+\end{description}
+
+Problème : est-ce que ça a du sens de définir le mode \textbf{Unused} pour les expressions ?
+
+\subsection*{Relations entre les modes}
+Il existe une relation d'ordre sur les modes :
+
+\textbf{Deref} $>$ \textbf{Unguarded} $>$ \textbf{Guarded} $>$ \textbf{Delayed} $>$ \textbf{Unused}
+
+Définir la composition d'environnements
+
+Définir l'opérateur \verb&let m in m'&
+
+\subsection*{Système de Jeremy}
+On remarque que Jérémy n'utilise que 3 modes, les modes \textbf{Guarded}, \textbf{Delayed} et \textbf{Unused} étant confondus dans son système.
+
+\subsection*{Nouveau système}
+description à venir...
+
+Les définitions des règles de typages pour les constantes, variables, les applications, les définitions de fonctions sont directes (description à venir).
+
+Ça commence à devenir intéressant pour les expressions faisant intervenir des \verb&let& et \verb&let rec&.
+\end{document}
