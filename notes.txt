@@ -335,3 +335,78 @@ m[mx + Deref] = m[Deref].
 Ça veut dire qu'il nous faudrait plutôt définir un opérateur :
 let mx in m with mode m,
 avec m = Guarded si le pattern est destructif, m = Deref sinon.
+
+28/06/2018 :
+
+Je viens de me rendre compte que j'ai complètement oublié de parler de la règle
+match !
+
+Actuellement, il y a une subtilité. On pourrait s'attendre à ce que les
+expressions let p = e1 in e2 et match e1 with p -> e2 se comportent pareil, ce
+qui n'est pas le cas dans le système de Jeremy.
+
+En effet, on a les règles :
+
+Γ |- e1: A
+Γ + {x: A, x € vars(p)} |- e2: B
+--------------------------------
+Γ |- let p = e1 in e2: A' + B
+
+et 
+
+Γ |- e1: A
+Γ + {x: A', x € vars(p)} |- e2: B
+----------------------------------
+Γ |- match e1 with p -> e2: A' + B
+
+avec dans les deux cas A' = discard(A) * mode(p), mode(p) valans Deref si
+p est destructif, Guarded sinon.
+
+J'ai essayé de voir dans quel cas ces deux règles diffèrent.
+Je me suis convaincu que si mode(p) = Deref, toutes les variables apparaissant
+dans A sont en Deref, ce qui peut avoir une inflence sur B dans l'expression
+match ... with.
+Or, dans tous les cas, le type final est A' + B, avec toutes les variables
+de A en Deref, donc ça semble rien changer.
+
+Si mode(p) = Guarded, le seul changement est si l'une des variables est
+utilisée en mode Unguarded dans e1.
+Il faut que ce soit une variable définie par le let rec que l'on est en train
+de vérifier. De plus, si elle intervient dans une experssion déréférencée,
+délayée ou placée dans un constructeur, son mode passe en Guarded, ce qui est
+la même chose que A.
+
+Ce que je dit est confus, voici un exemple :
+let rec z = (let rec x = z in x)  (1)
+let rec z = (match z with x -> x) (2)
+
+Pour la ligne (1), le type de l'expression entre parenthèses sertai :
+(z: (z -> Unguarded))
+Pour la ligne (2), le type de l'experssion entre parenthèses serait :
+(z: (z -> Guarded))
+
+La ligne (1) est refusée puisque z est Unguarded, la ligne (2) est refusée
+puisque la taille de z n'est pas connue à la compilation (il faudrait utiliser
+le hack du compilateur pour vérifier).
+
+Il semblerait juste que la règle match ... with ... soit un peu plus
+permissive, mais que ça ne change rien au final.
+
+Je vais donc décider d'ignorer cette subtilité.
+
+Un règle pour match serait :
+
+Γ1, {x: m1(x), x € vars(x)} |- e1: m
+...
+Γn, {x: mn(x), x € vars(x)} |- en: m
+Γ |- e: m'1 + ... + m'n
+----------------------------------------------------------
+Γ1 + ... + Γn + Γ |- match e with p1 -> e1 ... pn -> en: m
+
+avec pour tout i entre 1 et n :
+m'i = let Unused in m si p est le pattern « _ »
+m'i = let mi(x) in m  si p est le pattern « x », x un identifieur
+m'i = m[Deref]        si p est un pattern destructif
+
+Remarque : je ne gère pas encore les patterns de la forme p | p', ni de la
+forme p as x.
