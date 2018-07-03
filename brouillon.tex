@@ -1,7 +1,9 @@
 \documentclass{article}
 
 \usepackage[utf8]{inputenc}
-\usepackage[french]{babel}
+\usepackage{mathpartir}
+\usepackage[nottoc, notlof, notlot]{tocbibind}
+\usepackage{hyperref}
 
 \title{}
 \author{Alban Reynaud}
@@ -11,40 +13,119 @@
 
 \maketitle
 
-\section*{Présentation}
+\section{Jeremy's Checker}
 
-\subsection*{Modes}
-On part sur 5 modes (pour les expressions/variables ?) :
+The current OCaml's recursive-value checker has been written by Jeremy Yallop.
+\cite{Yallop}.
+
+\subsection{Modes}
+
+This checker uses three \textit{access modes} to describe the way variables are
+accessed in an expression.
+
+These modes are:
 \begin{description}
-  \item[Deref] : se dit d'une expression ou d'une variable qui est évaluée pour être utilisée. Par exemple, dans \verb~e + 1~, \verb&e& est déréférencée. Toutes les variables intervenant dans une expression déréférencée le sont également.
-  \item[Delayed] : se dit d'une expression qui n'est pas évaluée immédiatement, ou d'une variable dont l'expression n'est pas évaluée immédiatement. Par exemple, dans \verb~fun () -> e~, l'évaluation de \verb&e& est retardée (\textit{delayed}).
-  \item[Guarded] : se dit d'une expression ou d'une variable placée dans un constructeur. Par exemple, dans \verb&Some(e)&, \verb&e& est gardée.
-  \item[Unused] : se dit d'une variable non utilisée dans une expression.
-  \item[Unguarded] : plus difficile à définir. L'idée est que dans :
-    \begin{verbatim}
-      let (rec?) x =  e in e'
-    \end{verbatim}
-    la variable \verb~x~ venant d'être crée n'est ni placée dans un constructeur, ni encore évaluée, son évaluation n'est pas non plus délayée. La variable est dite non gardée. (TODO : définir pour les expressions).
+  \item[Deref] : the value of a variable is accessed.
+  \item[Guarded] : the address of a variable is either placed in a constructor,
+    either in an expression that is lazily evaluated, either unused.
+  \item[Unguarded] : the address of a variable is not used in a guarded
+    context.
 \end{description}
 
-Problème : est-ce que ça a du sens de définir le mode \textbf{Unused} pour les expressions ?
+\subsection{Types and Environments}
+Access modes are used to describe a type-system.
 
-\subsection*{Relations entre les modes}
-Il existe une relation d'ordre sur les modes :
+In this system, the type of a variable $x$ is a map that associate every
+variable used in $x$'s definition to its access mode.
 
-\textbf{Deref} $>$ \textbf{Unguarded} $>$ \textbf{Guarded} $>$ \textbf{Delayed} $>$ \textbf{Unused}
+An environment is a map that associates variables to a type.
 
-Définir la composition d'environnements
+\textit{TODO: describe operations of types and environments (guard, discard,
+inspect, ...)}
 
-Définir l'opérateur \verb&let m in m'&
+\subsection{Inference Rules}
+This checker can be formalized by inference rules, as pointed out by Gabriel
+Scherer \cite{SchererRules}.
 
-\subsection*{Système de Jeremy}
-On remarque que Jérémy n'utilise que 3 modes, les modes \textbf{Guarded}, \textbf{Delayed} et \textbf{Unused} étant confondus dans son système.
+\begin{mathpar}
+  \infer*[rightstyle=\em, right={where $c$ is a constant.}]
+    { }
+    {\Gamma \vdash c: \emptyset} 
 
-\subsection*{Nouveau système}
-description à venir...
+  \infer*{ }{\Gamma, x: A \vdash x: A}
 
-Les définitions des règles de typages pour les constantes, variables, les applications, les définitions de fonctions sont directes (description à venir).
+  \infer*[rightstyle=\em, right={when $x \notin \Gamma$}]
+    { }
+    {\Gamma \vdash x: \emptyset}
+\end{mathpar}
 
-Ça commence à devenir intéressant pour les expressions faisant intervenir des \verb&let& et \verb&let rec&.
+\textit{TODO: complete the rules}
+
+\subsection{The Recursive Check Algorithm}
+
+When an expression of the form
+\verb"let rec" $x_1$ \verb"=" $e_1$ \verb"and ... and" $x_n$ = $e_n$
+is encountered, an envir,
+
+\section{A new system}
+
+\subsection{Overview}
+The checker we propose use a simpler type system. Types are just access modes
+rather than maps from variables to modes. Consequently, an environment is a map
+that associate to variables a mode.
+
+On the previous system, with a deduction of the form: $\Gamma \vdash expr: A$,
+the environment $\Gamma$ is the input and the type $A$ is the output.
+
+On this new system, with a deduction of the form: $\Gamma \vdash expr: m$, the
+mode $m$ is the input and the environment $\Gamma$ is the output. The idea is
+that $m$ represents the mode in which the expression $e$ will be evaluated, and
+the environment $\Gamma$ associates each free variable of $e$ to their use in
+$e$.
+
+\subsection{Modes}
+
+As the mode \textbf{Guarded} has different meanings, the mode \textbf{Guarded}
+is split into three modes:
+
+\begin{description}
+  \item[Guarded]: a variable is \textit{guarded} if its address is placed in a
+    constructor or stored in the environment of a closure (\textit{TODO: add an
+    example about this subtility, or remove it}). An expression is evaluated in     a guarded context if its value is going to be used in a guarded way.
+  \item[Delayed]: an expression is \textit{delayed} if it is lazily evaluated.
+    Variables contained in a delayed expression are used in a delayed mode.
+  \item[Unused]: a variable that is unused.
+\end{description}
+
+\subsection{Operations on modes}
+
+\textit{TODO: describe comparison between modes, mode composition and the rule
+let ... in ...}
+
+\subsection{Inference Rules}
+
+\begin{mathpar}
+  \infer*[rightstyle=\em, right={where $c$ is a constant}]
+         { }
+         {\emptyset \vdash c: m}
+
+  \infer*{ }
+         {x: m \vdash x: m}
+
+  \infer*{\Gamma_1 \vdash e_1: m[Deref] \\ \Gamma_2 \vdash e_2: m[Deref]}
+         {\Gamma_1 + \Gamma_2 \vdash e_1~e_2: m}
+
+  \infer*{\Gamma_1 \vdash e_1: m[Guarded] \\
+          ...                             \\
+          \Gamma_n \vdash e_n: m[Guarded]}
+         {\Gamma_1 + ... + \Gamma_n \vdash K(e_1, ..., e_n): m}
+
+  \infer*{\Gamma, x: m_x \vdash e: m[Delayed]}
+         {\Gamma \vdash fun~x \leftarrow e: m}
+
+\end{mathpar}
+
+\bibliographystyle{plain}
+\bibliography{sources}
+
 \end{document}
