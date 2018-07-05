@@ -121,9 +121,69 @@ let ... in ...}
          {\Gamma_1 + ... + \Gamma_n \vdash K(e_1, ..., e_n): m}
 
   \infer*{\Gamma, x: m_x \vdash e: m[Delayed]}
-         {\Gamma \vdash fun~x \leftarrow e: m}
-
+         {\Gamma \vdash fun~x \rightarrow e: m}
 \end{mathpar}
+
+\subsection{The let expressions case}
+The basic \verb"let" and \verb"let rec" rules are:
+
+\begin{mathpar}
+  \infer*{\Gamma_1 \vdash e_1: m[m_x + Guarded] \\
+          \Gamma_2, x: m_x \vdash e2: m}
+         {\Gamma_1 + \Gamma_2 \vdash let~x~= e_1~in~e_2: m}
+
+  \infer*{\Gamma_1, x: \_ \vdash e_1: m[m_x + Guarded] \\
+          \Gamma_2, x: m_x \vdash e2: m}
+         {\Gamma_1 + \Gamma_2 \vdash let~rec~x = e_1~in~e_2: m}
+\end{mathpar}
+
+The reason why the mode $m[m_x + Guarded]$ is used is that the expression
+\verb"e1" must be evaluated before \verb"e2". Therefore, at the time of the
+evaluation, this expression is not delayed. Its mode is at least
+\textbf{Guarded}. Then, the mode in which the bound variable \verb"x" is used
+influences the mode in which the variable used to compute \verb"e1" are used.
+Finally, it must be composed by the surrounding mode $m$.
+
+The generalization for multiple \verb"let" bindings is straightforward:
+\begin{displaymath}
+  \infer*{\Gamma_1, x_1: \_, x_2: \_ \vdash e_1: m[m_{x_1} + Guarded] \\\\
+          \Gamma_2, x_1: \_, x_2: \_ \vdash e_2: m[m_{x_2} + Guarded] \\\\
+          \Gamma, x_1: m_{x_1}, x_2: m_{x_2} \vdash e: m}
+         {\Gamma_1 + \Gamma_2 + \Gamma \vdash
+          let~rec~x_1 = e_1~and~x_2 = e_2~in~e}
+\end{displaymath}
+
+\subsection{Patterns and Bindings}
+However, this presentation of the \verb"let" rules is partial. Let bindings
+using patterns, such as \verb"let (x, y) = e".
+
+There are two kind of patterns to consider:
+\begin{description}
+  \item[Destructive Patterns]: patterns such as \verb"(x, y)" or \verb"Some x",
+    that need an inspection of the matched expression.
+  \item[Non-destructive patterns]: patterns such as \verb"x" or \verb"_" that
+    need no inspection.
+\end{description}
+
+Let $p$ be a pattern, and $mode(p)$ be \textbf{Deref} if the pattern $p$ is
+destructive, \textbf{Guarded} otherwise. A rule for \verb"let" expressions with
+patterns is:
+
+\begin{displaymath}
+  \infer*{\Gamma_1 \vdash p: ms=e_1~in~m \\
+          \Gamma_2, vars(p): ms \vdash e_2: m}
+         {\Gamma_1 + \Gamma_2 \vdash let~p=e_1~in~e_2: m}
+\end{displaymath}
+
+with the new notation:
+\begin{displaymath}
+  \infer{\Gamma \vdash e: m[\sum ms + mode(p)]}
+        {\Gamma \vdash p:ms=e~in~m}
+\end{displaymath}
+
+where $ms$ is the list of all the modes of the variables appearing in the
+pattern $p$, and $\sum ms$ is the maximal mode of $ms$ (\textbf{Unused} if $ms$
+is empty).
 
 \bibliographystyle{plain}
 \bibliography{sources}
