@@ -1,0 +1,40 @@
+Here is a collection of paper that seem relevant to this work.
+
+   A Type System for Well-Founded Recursion
+   Derek Dreyer, 2004
+   https://people.mpi-sws.org/~dreyer/papers/recursion/popl.pdf
+
+   Compilation of extended recursion in call-by-value languages
+   Tom Hirschowitz, Xavier Leroy, and J. B. Wells, 2009
+   https://arxiv.org/pdf/0902.1257
+
+   Safe Recursive Boxes
+   Gérard Boudol, 2004
+   https://hal.inria.fr/inria-00071467/document
+
+   The Recursive Record Semantics of Objects Revisited
+   Gérard Boudol, 2001
+   https://hal.inria.fr/inria-00072423/document
+
+   Unrestricted Pure Call-by-Value Recursion
+   Johan Nordlander, Magnus Carlsson, and Andy Gill, 2008
+   http://www.ittc.ku.edu/~andygill/papers/RecBinds.pdf
+
+   CoCaml: Functional programming with regular coinductive types.
+   Jean-Baptiste Jeannin, Dexter Kozen, and Alexandra Silva, 2017
+   https://jeannin.github.io/papers/cocaml.pdf
+
+
+[Gabriel] Alban, if you look at some of those papers, feel free to
+write down notes. (Don't write anything that you would feel
+embarrassed to have written if the authors of the paper read it.)
+
+
+# CoCaml
+
+This paper is mostly about a generalization of recursive/infinite data
+structures that allow much more that what we are working with. The
+generalization is not relevant to the internship. But it also contains
+a way to define the semantics of recursive definitions, page 9. This
+is probably the part that is most relevant. (This explanation could
+also be present in some other form in one of the other papers.)
