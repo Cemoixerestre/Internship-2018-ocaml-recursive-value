@@ -129,11 +129,11 @@ The basic \verb"let" and \verb"let rec" rules are:
 
 \begin{mathpar}
   \infer*{\Gamma_1 \vdash e_1: m[m_x + Guarded] \\
-          \Gamma_2, x: m_x \vdash e2: m}
+          \Gamma_2, x: m_x \vdash e_2: m}
          {\Gamma_1 + \Gamma_2 \vdash let~x~= e_1~in~e_2: m}
 
   \infer*{\Gamma_1, x: \_ \vdash e_1: m[m_x + Guarded] \\
-          \Gamma_2, x: m_x \vdash e2: m}
+          \Gamma_2, x: m_x \vdash e_2: m}
          {\Gamma_1 + \Gamma_2 \vdash let~rec~x = e_1~in~e_2: m}
 \end{mathpar}
 
@@ -184,6 +184,14 @@ with the new notation:
 where $ms$ is the list of all the modes of the variables appearing in the
 pattern $p$, and $\sum ms$ is the maximal mode of $ms$ (\textbf{Unused} if $ms$
 is empty).
+
+For \verb"match", the rule is:
+\begin{displaymath}
+  \infer{\Gamma \vdash e: m[\sum_i mode(p_i) + ms_i] \\
+         (\Gamma_i, vars(p_i): ms_i \vdash e_i: m)}
+        {\sum_i \Gamma_i + \Gamma \vdash
+         match~e~with~(p_i \leftarrow e_i)^i: m}
+\end{displaymath}
 
 \bibliographystyle{plain}
 \bibliography{sources}
