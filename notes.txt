@@ -410,3 +410,153 @@ m'i = m[Deref]        si p est un pattern destructif
 
 Remarque : je ne gère pas encore les patterns de la forme p | p', ni de la
 forme p as x.
+
+15/06/2018:
+J'ai pour la première fois lancé la suite de tests.
+
+Dans le dossier testsuite/tests/letrec, 15 tests sur 19 échouent.
+Les 4 tests exécutés avec succès sont :
+class_1.ml, lists.ml, mixining_value_closures_1.ml et pr4989.ml.
+
+Tous les tests qui échouent le font avec la sortie -2, mais je ne sais pas s'il
+s'agit de mon « failwith "TODO" ».
+
+Le test « class_1.ml » passe alors que je n'ai pas implémenté les classes, c'est
+étrange. Peut-être qu'il s'agit d'un test vérifiant qu'une exception est levée,
+il me faut vérifier.
+
+16/06/2018:
+Je vais légèrement changer ma définition de la composition, en définissant :
+m[Unguarded] = m
+Guarded[m'] = m' si m' <> Unguarded
+
+Cela ne change la définition que pour le cas Guarded[Unguarded], qui vaut
+maintenant Guarded et non Unguarded.
+
+Intuitivement, cela se justifie 
+
+L'une des raisons de ce chagement et que dans les règles de typage, je fait
+plusieurs fois des disjonctions de cas, avec un mode m' qui vaut m dans certain
+cas et m[Delayed]/m[Deref]/m[Guarded] dans d'autres cas.
+
+Écrire une règle de typage est un peu pénible. C'est plus simple de dire que ce
+mode m' vaut m[m''], avec m'' valant Unguarded dans certains cas, ce qui permet
+d'avoir m = m'.
+
+Si ce que je viens de dire est peu clair, voir les règles de typage pour `lazy`
+ou `record` dans typing/rec_check.ml.
+
+Il y a une deuxième raison, pour laquelle j'avais pensé à ce changement plus
+tôt, mais je ne m'en rappelle plus. Il se pourrait qu'elle soit très proche de
+la raison précédemment évoquée.
+
+17/07/2018:
+Quelque chose que j'essaie de comprendre est le comportement des records et des
+tableaux avec des flottants, et en quoi cela diffère de l'utilisation avec des
+valeurs non flottantes.
+
+Prenons par exemple les tableaux. 3 sous-cas sont distingués :
+- le tableau est un tableau dépendant d'un type générique
+- le tableau est un tableau de flottants
+- le tableau est un tableau de type concret non flottants
+
+Dans les premiers cas, la règle (dans notre système) est la suivante :
+
+G0 |- x0: m[Deref]
+...
+Gn |- xn: m[Deref]
+-------------------------------
+G0 + ... Gn |- [|x0; ...; xn|]: m
+
+Alors que dans le dernier cas, la règle est la suivante :
+
+G0 |- x0: m[Guarded]
+...
+Gn |- xn: m[Guarded]
+-------------------------------
+G0 + ... Gn |- [|x0; ...; xn|]: m
+
+Cette dernière règle est facilement explicable, elle est très similaire aux 
+règles concernant les tuples et les constructeurs (incluant notamment les
+listes).
+
+La question est : pourquoi une différence de comportement pour les flottants et
+les types génériques ?
+
+Pour les flottants, cela doit venir d'une optimisation du compilateur. En règle
+générale, un tableau est représenté en mémoire par le tableau des valeurs.
+
+Il y a une exception pour les flottants. En effet, représenter comme ceci un
+tableau de flottants reviendrait à utiliser un tableau d'adresses. Au lieu, un
+tableau de flottants est un tableau de flottants unboxés, ce qui permet plus
+d'efficacité. Or, ceci change la 
+
+J'essaie de voir quelles sont les différences. Le code suivant n'est pas
+accepté :
+
+let f x = let rec y = x and a = [|y|] in a
+
+Alors que celui-ci l'est :
+
+let f (x: int) = let rec y = x and a = [|y|] in a
+
+Et étrangement, celui-ci passe (je n'aurais pas pensé à cause du cas spécial
+pour les tableaux de flottants) :
+
+let f (x: float) = let rec y = x and a = [|y|] in a
+
+EDIT : j'ai fait mes tests sur OCaml 4.05, version pour laquelle des expressions
+dangereuses avec des flottants été autorisées. Il faut que je refasse des tests.
+
+19/07/2018:
+Actuellement, je bloque sur le typage des modules.
+Il me faut pouvoir typer les expressions de modules : struct ... end.
+
+On peut considérer, en faisant une grosse approximation, que l'expression :
+struct
+let x1 = e1
+...
+let xn = en
+end
+
+doit se typer de la même façon que :
+let x1 = e1 in
+...
+let xn = en in
+K(x1, ..., xn)
+
+Ce qui donne :
+
+...
+--------------------------------------
+G |- K(x1, ..., xn): m
+avec G = x1: Guarded, ..., xn: Guarded
+
+Gn |- en: m[Guarded] G |- ...
+---
+Gn + G-xn |- let xn = en in K(x1, ..., xn): m
+
+G{n-1} |- e{n-1}: m[m' + Guarded]   (Gn + G) - {x{n-1}, xn}, x{n-1}: m' |- ...
+------------------------------------------------------------------------------
+G{n-1} + (Gn + G) - {x{n-1}, xn} |- let x{n-1} = e{n-1} in ...: m
+
+...
+
+G1 |- e1: m[m' + Guarded] (G2 + ... + Gn + G)-{x2, ..., xn} |- ...
+------------------------------------------------------------------
+(G1 + ... + Gn + G) - {x1, ..., xn} |- let x1 = e1 in ...: m
+
+Remarque : il me semble qu'on n'a pas besoin de faire let ... in K(x1, ..., xn).
+Une expression dans laquelle x1, ..., xn sont utilisés en mode Delayed ou
+Unused semble donner la même chose.
+
+Cela nous donne donc la règle :
+
+G1 |- x1: (G2 + ... + Gn) = e1 in m
+G2 |- x2: (G3 + ... + Gn) = e2 in m
+...
+Gn |- x1: ø = e1 in m
+------------------------------------------------------------------------
+(G1 + ... + Gn) - {x1, ..., xn} |- struct let x1 = e1 ... xn = en end: m
+
+Cela donne déjà une base, on pourra généraliser ensuite.

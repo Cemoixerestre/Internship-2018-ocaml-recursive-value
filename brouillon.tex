@@ -187,9 +187,9 @@ is empty).
 
 For \verb"match", the rule is:
 \begin{displaymath}
-  \infer{\Gamma \vdash e: m[\sum_i mode(p_i) + ms_i] \\
+  \infer{\Gamma \vdash e: m[\sum\nolimits_i (mode(p_i) + ms_i)] \\
          (\Gamma_i, vars(p_i): ms_i \vdash e_i: m)}
-        {\sum_i \Gamma_i + \Gamma \vdash
+        {\sum\nolimits_i \Gamma_i + \Gamma \vdash
          match~e~with~(p_i \leftarrow e_i)^i: m}
 \end{displaymath}
 
