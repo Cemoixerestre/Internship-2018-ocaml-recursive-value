@@ -1,0 +1,145 @@
+\documentclass{article}
+
+\usepackage[utf8]{inputenc}
+\usepackage{listings}
+\usepackage{url}
+\usepackage{hyperref}
+\usepackage{amsmath}
+\usepackage{mathpartir}
+% \usepackage[french]{babel}
+
+\lstset{language=caml}
+\newcommand{\code}[1]{\text{\lstinline"#1"}}
+% \newcommand{\mode}[1]{\text{\textbf{#1}}}
+
+\title{Rethink OCaml Recursive Values}
+% Should I include a kind of subtitle to indicate that this is a "rapport de
+% stage" for my licence?
+\author{Alban Reynaud}
+\date{}
+
+\begin{document}
+
+\maketitle
+
+\section{Introduction}
+OCaml is a language of the ML family. One of the features of the language is the
+\lstinline|let rec| operators. It is usually used to define recursive
+functions, but it can also be used to define recursive values.
+
+For example, the following code: \lstinline|rec x = 1 :: x| creates an infinite
+list containing only ones.
+
+However, not all definitions can be computed. For example, definitions like:
+\lstinline|let rec x = x + 1| should be rejected by the compiler.
+
+Previously, this check relied on \textit{ad hoc} rules \cite{PreviousRules},
+which caused several issues. In 2016, Jeremy Yallop proposed a new check,
+designed as a simplified typing system \cite{Yallop}. One of the problem is that
+his system is too complex, and it is hard to reason about.
+
+During this internship, I investigated the current system and (following the
+intuition of Gabriel Scherer) and rewrote it as an inference rules system. Then,
+I proposed a simpler system. I implemented it in the compiler and successfully
+managed to pass the testsuite. Also, examining Jeremy Yallop's code, Gabriel and
+I found a bug and sent a pull request \cite{PullRequest}.
+
+\section{The current system}
+
+\subsection{Access modes}
+Three \textit{access modes} are used in this system. These modes are:
+\begin{description}
+  \item[Deref] : the value of a variable is accessed.
+  \item[Guarded] : the address of a variable is either placed in a constructor,
+    either in an expression that is lazily evaluated, either unused.
+  \item[Unguarded] : the address of a variable is not used in a guarded
+    context.
+\end{description}
+
+For example:
+\begin{itemize}
+  \item In the expression \lstinline|x + 1|, \lstinline|x| is accessed in the
+    \textbf{Deref} mode because its value must be accessed before being used as
+    a function argument.
+  \item In the expression \lstinline|1 :: x|, \lstinline|x| is accessed in the
+    \textbf{Guarded} mode. The address of \lstinline|x| is used in the
+    construction of the list, be it does not require the evaluation of
+    \lstinline|x|.
+  \item In the expression \lstinline|fun () -> x|, \lstinline|x| is accessed in
+    the \textbf{Guarded} mode, because the body of this function is lazily
+    evaluated, so it does not require the evaluation of \lstinline|x|.
+  \item Considere the expression \lstinline |let rec x = let y = x in ...|
+    In the definition of \lstinline|y|, \lstinline|x| is neither evaluater, nor
+    placed in a constructor, nor lazily evaluated. \lstinline|x| is considered
+    being used in the \textbf{Unguarded} mode.
+\end{itemize}
+
+\subsection{Types and Environments}
+In this system, types are maps that associate variables an access mode.
+Intuitively, the type of an expression give the use of variables in the
+definition of the expression.
+
+An environment is a map that associate variables to a type.
+
+\subsection{Operations}
+Some operations are defined on modes:
+\begin{displaymath}
+  \begin{array}{lll}
+    guard(\code{Unguarded})        & = & \code{Unguarded} \\
+    guard(m \neq \code{Unguarded}) & = & m                \\
+    inspect(m)                     & = & \code{Deref}     \\
+    delay(m)                       & = & \code{Guarded}   \\
+    discard(m)                     & = & guard(m)
+  \end{array}
+\end{displaymath}
+
+These operations are generalized on types.
+% Should I describe more precesily what I mean, or is it clear?
+
+It is possible to define an total order on modes:
+$$\code{Deref} > \code{Unguarded} > \code{Guarded}$$
+We have $m > m'$ if the mode $m$ is more constraining than the mode $m'$.
+
+So, let $m + m'$ denote the maximal mode between $m$ and $m'$, with respect to
+this order relation. Note that this operation is called \textit{prec} in
+Jeremy Yallop's code.
+
+We can generalize this definition for types and environments:
+\begin{displaymath}
+  \begin{array}{lll}
+    (t + t')           & : x \rightarrow & t(x) + t'(x) \\
+    (\Gamma + \Gamma') & : x \rightarrow & \Gamma(x) + \Gamma'(x)
+  \end{array}
+\end{displaymath}
+
+with:
+
+\begin{displaymath}
+  \begin{array}{lll}
+    t(x) = \code{Guarded} & \text{if} & x \notin dom(t) \\
+    \Gamma(x) = \emptyset & \text{if} & x \notin dom(\Gamma)
+  \end{array}
+\end{displaymath}
+
+\subsection{Inference Rules}
+Originally, Jeremy Yallop just gave an implementation of this check. Gabriel
+Scherer had the intuition that this system could be expressed with inference
+rules \cite{GascheComment1, GascheComment2}.
+
+This system works as follow: conclusions have the form
+$$\Gamma \vdash e: t$$
+where $\Gamma$ is an environment, $e$ is an expression and $t$ a type. The
+environment is the input and the type is the ouput.
+
+For example, the rule for application is:
+\begin{mathpar}
+  \infer*{\Gamma \vdash e_1: t_1 \\
+          \Gamma \vdash e_2: t_2}
+         {\Gamma \vdash e_1 e_2: inpect(t_1 + t_2)}
+\end{mathpar}
+% Should I give a short explanation?
+
+\bibliographystyle{plain}
+\bibliography{sources}
+
+\end{document}
