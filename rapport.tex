@@ -9,7 +9,20 @@
 % \usepackage[french]{babel}
 
 \lstset{language=caml}
+
+% Some macros:
 \newcommand{\code}[1]{\text{\lstinline"#1"}}
+
+\newcommand{\Deref}{\mathsf{Deref}}
+\newcommand{\Unguarded}{\mathsf{Unguarded}}
+\newcommand{\Guarded}{\mathsf{Guarded}}
+\newcommand{\Delayed}{\mathsf{Delayed}}
+\newcommand{\Unused}{\mathsf{Unused}}
+
+\newcommand{\inspect}{\mathsf{inspect}}
+\newcommand{\guard}{\mathsf{guard}}
+\newcommand{\discard}{\mathsf{discard}}
+\newcommand{\delay}{\mathsf{delay}}
 % \newcommand{\mode}[1]{\text{\textbf{#1}}}
 
 \title{Rethink OCaml Recursive Values}
@@ -42,7 +55,7 @@ During this internship, I investigated the current system and (following the
 intuition of Gabriel Scherer) and rewrote it as an inference rules system. Then,
 I proposed a simpler system. I implemented it in the compiler and successfully
 managed to pass the testsuite. Also, examining Jeremy Yallop's code, Gabriel and
-I found a bug and sent a pull request \cite{PullRequest}.
+I found a bug and sent a pull request.
 
 \section{The current system}
 
@@ -59,19 +72,19 @@ Three \textit{access modes} are used in this system. These modes are:
 For example:
 \begin{itemize}
   \item In the expression \lstinline|x + 1|, \lstinline|x| is accessed in the
-    \textbf{Deref} mode because its value must be accessed before being used as
+    $\Deref$ mode because its value must be accessed before being used as
     a function argument.
   \item In the expression \lstinline|1 :: x|, \lstinline|x| is accessed in the
-    \textbf{Guarded} mode. The address of \lstinline|x| is used in the
+    $\Guarded$ mode. The address of \lstinline|x| is used in the
     construction of the list, be it does not require the evaluation of
     \lstinline|x|.
   \item In the expression \lstinline|fun () -> x|, \lstinline|x| is accessed in
-    the \textbf{Guarded} mode, because the body of this function is lazily
+    the $\Guarded$ mode, because the body of this function is lazily
     evaluated, so it does not require the evaluation of \lstinline|x|.
   \item Considere the expression \lstinline |let rec x = let y = x in ...|
     In the definition of \lstinline|y|, \lstinline|x| is neither evaluater, nor
     placed in a constructor, nor lazily evaluated. \lstinline|x| is considered
-    being used in the \textbf{Unguarded} mode.
+    being used in the $\Unguarded$ mode.
 \end{itemize}
 
 \subsection{Types and Environments}
@@ -85,11 +98,11 @@ An environment is a map that associate variables to a type.
 Some operations are defined on modes:
 \begin{displaymath}
   \begin{array}{lll}
-    guard(\code{Unguarded})        & = & \code{Unguarded} \\
-    guard(m \neq \code{Unguarded}) & = & m                \\
-    inspect(m)                     & = & \code{Deref}     \\
-    delay(m)                       & = & \code{Guarded}   \\
-    discard(m)                     & = & guard(m)
+    \guard(\Unguarded)              & = & \Guarded \\
+    \guard(m \neq \Unguarded)       & = & m        \\
+    \inspect(m)                     & = & \Deref   \\
+    \delay(m)                       & = & \Guarded \\
+    \discard(m)                     & = & \guard(m)
   \end{array}
 \end{displaymath}
 
@@ -97,7 +110,7 @@ These operations are generalized on types.
 % Should I describe more precesily what I mean, or is it clear?
 
 It is possible to define an total order on modes:
-$$\code{Deref} > \code{Unguarded} > \code{Guarded}$$
+$$\Deref > \Unguarded > \Guarded$$
 We have $m > m'$ if the mode $m$ is more constraining than the mode $m'$.
 
 So, let $m + m'$ denote the maximal mode between $m$ and $m'$, with respect to
@@ -116,7 +129,7 @@ with:
 
 \begin{displaymath}
   \begin{array}{lll}
-    t(x) = \code{Guarded} & \text{if} & x \notin dom(t) \\
+    t(x) = \Guarded       & \text{if} & x \notin dom(t) \\
     \Gamma(x) = \emptyset & \text{if} & x \notin dom(\Gamma)
   \end{array}
 \end{displaymath}
@@ -135,9 +148,58 @@ For example, the rule for application is:
 \begin{mathpar}
   \infer*{\Gamma \vdash e_1: t_1 \\
           \Gamma \vdash e_2: t_2}
-         {\Gamma \vdash e_1 e_2: inpect(t_1 + t_2)}
+         {\Gamma \vdash e_1~e_2: \inspect(t_1 + t_2)}
 \end{mathpar}
 % Should I give a short explanation?
+
+\subsection{The Check Algorithm}
+The check is performed recursively. Every node of the abstract syntax tree
+\footnote{defined in the module \texttt{Typedtree}, that is defined is the
+files \texttt{typing/typedtree.mli} and \texttt{typing/typedtree.ml}} is
+checked. If it is a node with the form:
+\begin{lstlisting}[mathescape=true]
+  let rec $x_1$ = $e_1$ and ... and $x_n$ = $e_n$
+\end{lstlisting}
+An environment $\Gamma = (x_i: (x_i: \Unguarded))^i$ is created.
+Then, the types of the $e_i$ expressions are computed in the $\Gamma$
+environment. If a variable is used in mode $\Unguarded$ or $\Deref$ in one of
+these types, then the compiler reject this expression.
+
+\subsection{Examples}
+\textit{TODO}
+
+\subsection{Bug in the implementation}
+When examining the code, Gabriel and I found a bug. It appears in the recursive
+class declarations check.
+
+Indeed, it is possible to define classes with the syntax:
+\begin{lstlisting}[mathescape=true]
+class $a$ = let rec $x_1$ = $e_1$ and ... and $x_n$ = $e_n$ in $e$
+\end{lstlisting}
+The compiler check that the \lstinline|let rec| bindings are correct. In
+particular, it is not allowed to use the recursively defined class $a$ in an
+unguarded mode.
+
+%TODO: give more details. Show the rules? The code?
+The problem was that in the previous check, the expressions affected to
+variables bound in the \lstinline|let rec| and the class expression $e$ were
+typed separately. For example, in the definition:
+\begin{lstlisting}[mathescape=true]
+class a = let rec x = $e_x$ in let y = $e_y$ in $e$
+\end{lstlisting}
+it is possible to make an incorrect use of the variable $x$ in the expression
+$e_y$.
+
+Gabriel found that the definition:
+\begin{lstlisting}
+class a = let rec x = new a in let _y = x () in object end
+\end{lstlisting}
+caused a segfault.
+
+I wrote a patch that fix this bug, added new test and sent a pull request,
+with the help of Gabriel \cite{PullRequest}.
+
+% Note that this bug only appears since the version 4.06.
 
 \bibliographystyle{plain}
 \bibliography{sources}
