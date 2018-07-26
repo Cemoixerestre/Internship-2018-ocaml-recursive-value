@@ -276,8 +276,8 @@ For example:
     mode $\Unused$ in the last expression.
   \item In the expression \lstinline|let y = x in y|, as the locally defined
     variable \lstinline|y| use the value \lstinline|x| but does not require the
-    inspection of \lstinline|x|. The address of \lstinline|x| is not placed in
-    some datastructure, and as \lstinline|y| is returned, the variable
+    inspection of \lstinline|x|, as the address of \lstinline|x| is not placed
+    in some datastructure, and as \lstinline|y| is returned, the variable
     \lstinline|x| is used in the $\Unguarded$ mode in the overall expression.
 
   % \item A more subtle example: in the expression
@@ -324,6 +324,38 @@ For example:
     must be inpected to evaluate both the expression \lstinline|x + 1| and the
     overall expression. Indeed, we have $\Guarded [\Deref] = \Deref$.
 \end{itemize}
+
+\subsection{Inference rules}
+In this system, deduction rules have the form:
+$$\Gamma \vdash e: m$$
+where $\Gamma$ is a context, $e$ is an expression and $m$ is a mode.
+Contrary to the previous system, the mode (or type) $m$ is the input and the
+environment $\Gamma$ is the output. Intuitively, $m$ is the mode in which the
+expression $e$ is evaluated, and $\Gamma$ indicates how the variables not
+locally bound in $e$ must be accessed to use $e$ in the mode $m$.
+
+The main rules are:
+\begin{mathpar}
+  \infer*{c~\text{is a constant}}
+         {\emptyset \vdash c: m}
+
+  \infer*{ }
+         {x: m \vdash x: m}
+
+  \\
+
+  \infer*{\Gamma, x: \_ \vdash e: m[\Delayed]}
+         {\Gamma \vdash \tfun x e : m}
+
+  \infer*{\Gamma_1 \vdash e_1: m[\Deref] \\
+          \Gamma_2 \vdash e_2: m[\Deref]}
+         {\Gamma_1 + \Gamma_2 \vdash \tapply{e_1}{e_2}: m}
+
+  \\
+
+  \infer*{(\Gamma_i \vdash e_i: m[\Guarded])^i}
+         {\Gamma_1 + ... + \Gamma_n \vdash K(e_1, ..., e_n): m}
+\end{mathpar}
 
 \bibliographystyle{plain}
 \bibliography{sources}
