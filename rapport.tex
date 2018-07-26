@@ -57,7 +57,7 @@ his system is too complex, and it is hard to reason about.
 
 During this internship, I investigated the current system and (following the
 intuition of Gabriel Scherer) and rewrote it as an inference rules system. Then,
-I proposed a simpler system. I implemented it in the compiler and successfully
+I designed a simpler system. I implemented it in the compiler and successfully
 managed to pass the testsuite. Also, examining Jeremy Yallop's code, Gabriel and
 I found a bug and sent a pull request.
 
@@ -177,6 +177,8 @@ The main rules are:
   \infer*
     {(\Gamma \vdash e_i: t_i)^i}
     {\Gamma \vdash K(e_1, ..., e_n): \guard(t_1 + ... + t_n)}
+
+  \\
 \end{mathpar}
 % Should I give a short explanation?
 
@@ -228,6 +230,100 @@ I wrote a patch that fix this bug, added new test and sent a pull request,
 with the help of Gabriel \cite{PullRequest}.
 
 % Note that this bug only appears since the version 4.06.
+
+\section{A new system}
+
+% TODO: give an short introduction, with motivations, and cite comments of
+% Gabriel about this system.
+
+\subsection{Modes, types and environments}
+In Jeremy's system, access modes refer to way variables are used in expressions.
+In this new system, modes are also used to describe the context in which
+expressions are defined and evaluated.
+
+Also, a problem of Jeremy's system is that the $\Guarded$ mode has a lot of
+different meanings. To be more expressive, this mode is split into three modes
+in this system: $\Guarded$, $\Delayed$ and $\Unused$. So we now five modes:
+
+\begin{description}
+  \item[Deref]: it refer to an expression that is evaluated and inspected, or to
+    a variable such that its value is inspected.
+  \item[Guarded]: it refer to a variable such that its address is used in some
+    datastructure (for example: a constructor) but the variable has not been
+    inspected. It also refer to an expression such that its address will used
+    in such a context.
+  \item[Delayed]: it refer to an expression such that its evaluation is delayed,
+    or in a variable only used in delayed expressions.
+  \item[Unused]: it refer to an unused variable.
+  \item[Unguarded]: it refer to a variable such that its value is not inspected,
+    and that its address is directly placed in a variable, not placed in some
+    datastructure.
+\end{description}
+
+For example:
+\begin{itemize}
+  \item In the expression \lstinline|x + (y * z)|, both the variable
+    \lstinline|x| and the expression \lstinline|y * z| are used in the $\Deref$
+    mode.
+  \item In the expression \lstinline|(f x) :: y|, both the variable
+    \lstinline|y| and the expression \lstinline|f x| are used in the $\Guarded$
+    mode.
+  \item In the expression \lstinline|fun () -> x|, since the variable
+    \lstinline|x| is inspected just when this function is called, the variable
+    \lstinline|x| is used in the $\Delayed$ mode.
+  \item In the expression \lstinline|fun x -> y + z|, as \lstinline|x| does not
+    appear in the expression \lstinline|y + z|, \lstinline|x| is used in the
+    mode $\Unused$ in the last expression.
+  \item In the expression \lstinline|let y = x in y|, as the locally defined
+    variable \lstinline|y| use the value \lstinline|x| but does not require the
+    inspection of \lstinline|x|. The address of \lstinline|x| is not placed in
+    some datastructure, and as \lstinline|y| is returned, the variable
+    \lstinline|x| is used in the $\Unguarded$ mode in the overall expression.
+
+  % \item A more subtle example: in the expression
+   % \lstinline|let rec f = fun() -> f in f| (the option \verb|-rectypes| must
+    %be passed to the compiler to accept it), the address of the variable
+    % \lstinline|f| is used in the environment stored in this closure.
+\end{itemize}
+
+In this system, a type is simply a mode in which an experssion is evaluated. An
+environment is a map that associate to variables a mode. By default, if a
+variable does appear in the domain of this map, this variable is associated to
+$\Unused$.
+
+\subsection{Relations between modes}
+With these new modes, we can similarly define an order relation:
+$$\Deref > \Unguarded > \Guarded > \Delayed > \Unused$$
+We can define how to join two environments $\Gamma$ and $\Gamma'$ in the same
+way, and use the same notation $\Gamma + \Gamma'$.
+
+A key concept in this new system is the composition of modes. If a variable $x$
+is used in an expression $e$ in mode $m$, and that this expression $e$ is used
+in an expression $e'$ in mode $e'$, let $m'[m]$ denote the mode in which the
+variable $x$ is used in the expression $e'$. This is called the
+\textit{composition} of modes $m'$ and $m$.  We can compute the composition of two modes in this way: \begin{displaymath} \begin{array}{lll} \Deref [m]     & = & \Deref   \\
+    \Delayed [m]   & = & \Delayed \\
+    m[\Unguarded]  & = & m        \\
+    \Unguarded [m] & = & m        \\
+    \Guarded [m]   & = & m        \\
+  \end{array}
+\end{displaymath}
+
+For example:
+\begin{itemize}
+  \item In the expression \lstinline|fun () -> x + 1|, the variable
+    \lstinline|x| is used in the $\Deref$ mode in the expression
+    \lstinline|x + 1|. But this expression is used in the mode $\Delayed$ in the
+    expression \lstinline|fun () -> x + 1|. We can notice that the evaluation of
+    x could be delayed in this function, so \lstinline|x| is used in mode
+    $\Delayed$ in the overall expression. Indeed, we have
+    $\Delayed [\Deref] = \Delayed$.
+
+  \item In the expression \lstinline|Some (x + 1)|, even if the expression
+    \lstinline|x + 1| is used in mode $\Guarded$, the variable \lstinline|x|
+    must be inpected to evaluate both the expression \lstinline|x + 1| and the
+    overall expression. Indeed, we have $\Guarded [\Deref] = \Deref$.
+\end{itemize}
 
 \bibliographystyle{plain}
 \bibliography{sources}
