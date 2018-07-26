@@ -11,7 +11,8 @@
 \lstset{language=caml}
 
 % Some macros:
-\newcommand{\code}[1]{\text{\lstinline"#1"}}
+\newcommand{\tfun}[2]{\mathtt{fun}~#1 \to #2}
+\newcommand{\tapply}[2]{#1~#2}
 
 \newcommand{\Deref}{\mathsf{Deref}}
 \newcommand{\Unguarded}{\mathsf{Unguarded}}
@@ -25,7 +26,7 @@
 \newcommand{\delay}{\mathsf{delay}}
 % \newcommand{\mode}[1]{\text{\textbf{#1}}}
 
-\title{Rethink OCaml Recursive Values}
+\title{Rethinking OCaml Recursive Values}
 % Should I include a kind of subtitle to indicate that this is a "rapport de
 % stage" for my licence?
 \author{Alban Reynaud}
@@ -34,6 +35,9 @@
 \begin{document}
 
 \maketitle
+
+This work has been done in an internship in Inria Saclay, team Parsifal. It was
+supervised by Gabriel Scherer.
 
 \section{Introduction}
 OCaml is a language of the ML family. One of the features of the language is the
@@ -144,11 +148,35 @@ $$\Gamma \vdash e: t$$
 where $\Gamma$ is an environment, $e$ is an expression and $t$ a type. The
 environment is the input and the type is the ouput.
 
-For example, the rule for application is:
+The main rules are:
 \begin{mathpar}
+  \infer*
+    {c~\text{is a constant}}
+    {\Gamma \vdash c: \emptyset}
+
+  \\
+
+  \infer*{ }
+         {\Gamma, x: t \vdash x: t}
+
+  \infer*%[rightstyle=\em, right={when $x \notin \Gamma$}]
+    {x \notin \Gamma}
+    {\Gamma \vdash x: \emptyset}
+
+  \\
+
   \infer*{\Gamma \vdash e_1: t_1 \\
           \Gamma \vdash e_2: t_2}
-         {\Gamma \vdash e_1~e_2: \inspect(t_1 + t_2)}
+         {\Gamma \vdash \tapply{e_1}{e_2}: \inspect(t_1 + t_2)}
+
+  \infer*{\Gamma \vdash e: t}
+         {\Gamma \vdash \tfun x e: \delay(t)}
+
+  \\
+
+  \infer*
+    {(\Gamma \vdash e_i: t_i)^i}
+    {\Gamma \vdash K(e_1, ..., e_n): \guard(t_1 + ... + t_n)}
 \end{mathpar}
 % Should I give a short explanation?
 
