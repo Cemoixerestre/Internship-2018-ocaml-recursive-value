@@ -227,6 +227,9 @@ The main rules are:
 % [Gabriel]: yes, you should give a short informal explanation, of at
 % least one of the rules (no need to paraphrase all of them).
 
+% [Gabriel]: you should have the "let" rule as well, it is an
+% important and delicate rule.
+
 \subsection{The Check Algorithm}
 
 % [Gabriel]: this should come before "The main rules are:" above. We
@@ -263,6 +266,16 @@ The compiler check that the \lstinline|let rec| bindings are correct. In
 particular, it is not allowed to use the recursively defined class $a$ in an
 unguarded mode.
 
+% [Gabriel]: the explanation here is wrong, and I don't know whether
+% it is on purpose (a simplification) or not. The problem is not the
+% `let rec`, we don't need `rec` to create bad examples (and I think
+% it would be clearer if you did *not* use `rec` in this sectoin), it
+% is about using the class with `new` from within the class definition:
+%
+% class a =
+%   let x = ... new a ... in
+%   object ... end
+
 %TODO: give more details. Show the rules? The code?
 The problem was that in the previous check, the expressions affected to
 variables bound in the \lstinline|let rec| and the class expression $e$ were
@@ -278,6 +291,7 @@ Gabriel found that the definition:
 class a = let rec x = new a in let _y = x () in object end
 \end{lstlisting}
 caused a segfault.
+% [Gabriel]: let x () = new a in ...
 
 I wrote a patch that fix this bug, added new test and sent a pull request,
 with the help of Gabriel \cite{PullRequest}.
@@ -361,6 +375,8 @@ variable $x$ is used in the expression $e'$. This is called the
     \Guarded [m]   & = & m        \\
   \end{array}
 \end{displaymath}
+% Gabriel: You could write e[x] for e with x that occurs in it, and
+% e'[e[x]] for e' with e[x] that occurs in it.
 
 For example:
 \begin{itemize}
@@ -409,6 +425,9 @@ The main rules are:
   \infer*{(\Gamma_i \vdash e_i: m[\Guarded])^i}
          {\Gamma_1 + ... + \Gamma_n \vdash K(e_1, ..., e_n): m}
 \end{mathpar}
+
+% [Gabriel]: you should have the "let" rule as well, it is an
+% important and delicate rule.
 
 \bibliographystyle{plain}
 \bibliography{sources}
