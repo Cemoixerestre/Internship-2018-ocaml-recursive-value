@@ -29,6 +29,8 @@
 \title{Rethinking OCaml Recursive Values}
 % Should I include a kind of subtitle to indicate that this is a "rapport de
 % stage" for my licence?
+
+% [Gabriel]: you can add "Internship report:" to the title
 \author{Alban Reynaud}
 \date{}
 
@@ -39,16 +41,26 @@
 This work has been done in an internship in Inria Saclay, team Parsifal. It was
 supervised by Gabriel Scherer.
 
+% [Gabriel] You should give the specific dates of your internship, to
+% situate the work in time.
+
 \section{Introduction}
-OCaml is a language of the ML family. One of the features of the language is the
-\lstinline|let rec| operators. It is usually used to define recursive
+OCaml is a
+% [Gabriel] statically-typed functional programming
+language of the ML family. One of the features of the language is the
+\lstinline|let rec| operator. It is usually used to define recursive
 functions, but it can also be used to define recursive values.
 
-For example, the following code: \lstinline|rec x = 1 :: x| creates an infinite
-list containing only ones.
+For example, the following code: \lstinline|rec x = 1 :: x|
+% [Gabriel] For full code examples, even short ones, you could use
+% a full inline block (you don't have page limits!). Also, "rec" =>
+% "let rec"
+creates an infinite list containing only ones.
 
 However, not all definitions can be computed. For example, definitions like:
 \lstinline|let rec x = x + 1| should be rejected by the compiler.
+% [Gabriel] again, you can use a full block for this
+% [Gabriel] Why should this be rejected by the compiler?
 
 Previously, this check relied on \textit{ad hoc} rules \cite{PreviousRules},
 which caused several issues. In 2016, Jeremy Yallop proposed a new check,
@@ -59,9 +71,12 @@ During this internship, I investigated the current system and (following the
 intuition of Gabriel Scherer) and rewrote it as an inference rules system. Then,
 I designed a simpler system. I implemented it in the compiler and successfully
 managed to pass the testsuite. Also, examining Jeremy Yallop's code, Gabriel and
-I found a bug and sent a pull request.
+I found a bug and sent a pull request
+% [Gabriel] to fix it
+.
 
 \section{The current system}
+% [Gabriel] Repeat that this is Jeremy Yallop's system
 
 \subsection{Access modes}
 Three \textit{access modes} are used in this system. These modes are:
@@ -90,11 +105,22 @@ For example:
     placed in a constructor, nor lazily evaluated. \lstinline|x| is considered
     being used in the $\Unguarded$ mode.
 \end{itemize}
+% [Gabriel] It is bad to have two formulas or two code blocks
+% separated by just a comma. You should have words of informal text
+% between the two, to make parsing easier. Instead of "|code|, |x|",
+% you can write "|code|, the variable |x|".
 
 \subsection{Types and Environments}
 In this system, types are maps that associate variables an access mode.
-Intuitively, the type of an expression give the use of variables in the
+% [Gabriel] that associate an access mode to each variable
+Intuitively, the type of an expression gives the use of variables in the
 definition of the expression.
+
+% [Gabriel] In the paragraph above you should give the metavariable
+% for types: "types $t$ are maps ...". I don't like the use of $t$ for
+% this, because it is very common to use it for expressions (terms)
+% instead of types. You could use a capital $T$, or $A, B...$, or
+% either $u$ or $U$ like "use".
 
 An environment is a map that associate variables to a type.
 
@@ -112,6 +138,11 @@ Some operations are defined on modes:
 
 These operations are generalized on types.
 % Should I describe more precesily what I mean, or is it clear?
+
+% [Gabriel] "precesily" is a typo that would have caught by
+% a spellchecker. You should find out how to run a spellcheck from
+% your favorite text editor, and run it from times to times. In Emacs
+% I use "M-x ispell".
 
 It is possible to define an total order on modes:
 $$\Deref > \Unguarded > \Guarded$$
@@ -139,9 +170,12 @@ with:
 \end{displaymath}
 
 \subsection{Inference Rules}
-Originally, Jeremy Yallop just gave an implementation of this check. Gabriel
-Scherer had the intuition that this system could be expressed with inference
-rules \cite{GascheComment1, GascheComment2}.
+Originally, Jeremy Yallop just gave an implementation of this
+check. Gabriel Scherer proposed a first draft of inference rules
+corresponding to this implementation \cite{GascheComment1, GascheComment2}.
+% [Gabriel] I reformulated above. I think that Jeremy knew well that
+% one could use inference rules, he just didn't bother writing them
+% down in his PR.
 
 This system works as follow: conclusions have the form
 $$\Gamma \vdash e: t$$
@@ -150,39 +184,59 @@ environment is the input and the type is the ouput.
 
 The main rules are:
 \begin{mathpar}
+  % [Gabriel] In {mathpar}, blank lines matter. "\\" and "\n \\ \n" do
+  % not have the same semantics. You should have either \\ or a blank
+  % line between two rules, but not both. If you want to skip a line
+  % without using a blank line, just put a comment marker at the
+  % beginning. (I did it for you below)
+% 
   \infer*
     {c~\text{is a constant}}
     {\Gamma \vdash c: \emptyset}
-
+    % [Gabriel] I believe that this rule can be skipped. It is
+    % informal ("is a constant?") and not interesting.
+%
   \\
-
+%
   \infer*{ }
          {\Gamma, x: t \vdash x: t}
 
   \infer*%[rightstyle=\em, right={when $x \notin \Gamma$}]
     {x \notin \Gamma}
     {\Gamma \vdash x: \emptyset}
-
+%
   \\
-
+%
   \infer*{\Gamma \vdash e_1: t_1 \\
           \Gamma \vdash e_2: t_2}
          {\Gamma \vdash \tapply{e_1}{e_2}: \inspect(t_1 + t_2)}
 
   \infer*{\Gamma \vdash e: t}
          {\Gamma \vdash \tfun x e: \delay(t)}
-
+%
   \\
-
+%
   \infer*
     {(\Gamma \vdash e_i: t_i)^i}
     {\Gamma \vdash K(e_1, ..., e_n): \guard(t_1 + ... + t_n)}
-
+%
   \\
 \end{mathpar}
 % Should I give a short explanation?
 
+% [Gabriel]: yes, you should give a short informal explanation, of at
+% least one of the rules (no need to paraphrase all of them).
+
+% [Gabriel]: you should have the "let" rule as well, it is an
+% important and delicate rule.
+
 \subsection{The Check Algorithm}
+
+% [Gabriel]: this should come before "The main rules are:" above. We
+% need to understand how the inference rules are used by the whole
+% algorithm to get an accept/reject decision, before we can read and
+% appreciate the inference rules themselves.
+
 The check is performed recursively. Every node of the abstract syntax tree
 \footnote{defined in the module \texttt{Typedtree}, that is defined is the
 files \texttt{typing/typedtree.mli} and \texttt{typing/typedtree.ml}} is
@@ -194,6 +248,8 @@ An environment $\Gamma = (x_i: (x_i: \Unguarded))^i$ is created.
 Then, the types of the $e_i$ expressions are computed in the $\Gamma$
 environment. If a variable is used in mode $\Unguarded$ or $\Deref$ in one of
 these types, then the compiler reject this expression.
+
+%[Gabriel]: the expressoins $e_i$ .. the environment $\Gamma$.
 
 \subsection{Examples}
 \textit{TODO}
@@ -210,6 +266,16 @@ The compiler check that the \lstinline|let rec| bindings are correct. In
 particular, it is not allowed to use the recursively defined class $a$ in an
 unguarded mode.
 
+% [Gabriel]: the explanation here is wrong, and I don't know whether
+% it is on purpose (a simplification) or not. The problem is not the
+% `let rec`, we don't need `rec` to create bad examples (and I think
+% it would be clearer if you did *not* use `rec` in this sectoin), it
+% is about using the class with `new` from within the class definition:
+%
+% class a =
+%   let x = ... new a ... in
+%   object ... end
+
 %TODO: give more details. Show the rules? The code?
 The problem was that in the previous check, the expressions affected to
 variables bound in the \lstinline|let rec| and the class expression $e$ were
@@ -225,6 +291,7 @@ Gabriel found that the definition:
 class a = let rec x = new a in let _y = x () in object end
 \end{lstlisting}
 caused a segfault.
+% [Gabriel]: let x () = new a in ...
 
 I wrote a patch that fix this bug, added new test and sent a pull request,
 with the help of Gabriel \cite{PullRequest}.
@@ -308,6 +375,8 @@ variable $x$ is used in the expression $e'$. This is called the
     \Guarded [m]   & = & m        \\
   \end{array}
 \end{displaymath}
+% Gabriel: You could write e[x] for e with x that occurs in it, and
+% e'[e[x]] for e' with e[x] that occurs in it.
 
 For example:
 \begin{itemize}
@@ -356,6 +425,9 @@ The main rules are:
   \infer*{(\Gamma_i \vdash e_i: m[\Guarded])^i}
          {\Gamma_1 + ... + \Gamma_n \vdash K(e_1, ..., e_n): m}
 \end{mathpar}
+
+% [Gabriel]: you should have the "let" rule as well, it is an
+% important and delicate rule.
 
 \bibliographystyle{plain}
 \bibliography{sources}
