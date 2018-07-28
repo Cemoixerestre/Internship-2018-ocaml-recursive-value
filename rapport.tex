@@ -13,6 +13,7 @@
 % Some macros:
 \newcommand{\tfun}[2]{\mathtt{fun}~#1 \to #2}
 \newcommand{\tapply}[2]{#1~#2}
+\newcommand{\tlet}[3]{\mathtt{let~}#1=#2\mathtt{~in~}#3}
 
 \newcommand{\Deref}{\mathsf{Deref}}
 \newcommand{\Unguarded}{\mathsf{Unguarded}}
@@ -26,11 +27,10 @@
 \newcommand{\delay}{\mathsf{delay}}
 % \newcommand{\mode}[1]{\text{\textbf{#1}}}
 
-\title{Rethinking OCaml Recursive Values}
+\title{Internship Report: Rethinking OCaml Recursive Values}
 % Should I include a kind of subtitle to indicate that this is a "rapport de
 % stage" for my licence?
 
-% [Gabriel]: you can add "Internship report:" to the title
 \author{Alban Reynaud}
 \date{}
 
@@ -45,16 +45,15 @@ supervised by Gabriel Scherer.
 % situate the work in time.
 
 \section{Introduction}
-OCaml is a
-% [Gabriel] statically-typed functional programming
-language of the ML family. One of the features of the language is the
-\lstinline|let rec| operator. It is usually used to define recursive
-functions, but it can also be used to define recursive values.
+OCaml is a statically-types functionnal language of the ML family. One of the
+features of the language is the \lstinline|let rec| operator. It is usually
+used to define recursive functions, but it can also be used to define recursive
+values.
 
-For example, the following code: \lstinline|rec x = 1 :: x|
-% [Gabriel] For full code examples, even short ones, you could use
-% a full inline block (you don't have page limits!). Also, "rec" =>
-% "let rec"
+For example, the following code:
+\begin{lstlisting}
+let rec x = 1 :: x
+\end{lstlisting}
 creates an infinite list containing only ones.
 
 However, not all definitions can be computed. For example, definitions like:
@@ -101,14 +100,10 @@ For example:
     the $\Guarded$ mode, because the body of this function is lazily
     evaluated, so it does not require the evaluation of \lstinline|x|.
   \item Considere the expression \lstinline |let rec x = let y = x in ...|
-    In the definition of \lstinline|y|, \lstinline|x| is neither evaluater, nor
-    placed in a constructor, nor lazily evaluated. \lstinline|x| is considered
-    being used in the $\Unguarded$ mode.
+    In the definition of \lstinline|y|, the variable \lstinline|x| is neither
+    evaluater, nor placed in a constructor, nor lazily evaluated. \lstinline|x|
+    is considered being used in the $\Unguarded$ mode.
 \end{itemize}
-% [Gabriel] It is bad to have two formulas or two code blocks
-% separated by just a comma. You should have words of informal text
-% between the two, to make parsing easier. Instead of "|code|, |x|",
-% you can write "|code|, the variable |x|".
 
 \subsection{Types and Environments}
 In this system, types are maps that associate variables an access mode.
@@ -190,45 +185,33 @@ The main rules are:
   % without using a blank line, just put a comment marker at the
   % beginning. (I did it for you below)
 % 
-  \infer*
-    {c~\text{is a constant}}
-    {\Gamma \vdash c: \emptyset}
-    % [Gabriel] I believe that this rule can be skipped. It is
-    % informal ("is a constant?") and not interesting.
-%
-  \\
-%
   \infer*{ }
-         {\Gamma, x: t \vdash x: t}
+         {\Gamma, x: A \vdash x: A}
 
-  \infer*%[rightstyle=\em, right={when $x \notin \Gamma$}]
+  \infer*
     {x \notin \Gamma}
     {\Gamma \vdash x: \emptyset}
-%
   \\
-%
-  \infer*{\Gamma \vdash e_1: t_1 \\
-          \Gamma \vdash e_2: t_2}
-         {\Gamma \vdash \tapply{e_1}{e_2}: \inspect(t_1 + t_2)}
+  \infer*{\Gamma \vdash e_1: A \\
+          \Gamma \vdash e_2: B}
+         {\Gamma \vdash \tapply{e_1}{e_2}: \inspect(A + B)}
 
-  \infer*{\Gamma \vdash e: t}
-         {\Gamma \vdash \tfun x e: \delay(t)}
-%
+  \infer*{\Gamma \vdash e: A}
+         {\Gamma \vdash \tfun x e: \delay(A)}
   \\
-%
   \infer*
-    {(\Gamma \vdash e_i: t_i)^i}
-    {\Gamma \vdash K(e_1, ..., e_n): \guard(t_1 + ... + t_n)}
-%
+    {(\Gamma \vdash e_i: A_i)^i}
+    {\Gamma \vdash K(e_1, ..., e_n): \guard(A_1 + ... + A_n)}
   \\
+  \infer*
+    {\Gamma \vdash e_1: A \\
+     \Gamma, x : A \vdash e_2: B}
+    {\Gamma \vdash \tlet{x}{e_1}{e_2}: discard(A) + B}
 \end{mathpar}
 % Should I give a short explanation?
 
 % [Gabriel]: yes, you should give a short informal explanation, of at
 % least one of the rules (no need to paraphrase all of them).
-
-% [Gabriel]: you should have the "let" rule as well, it is an
-% important and delicate rule.
 
 \subsection{The Check Algorithm}
 
@@ -245,11 +228,9 @@ checked. If it is a node with the form:
   let rec $x_1$ = $e_1$ and ... and $x_n$ = $e_n$
 \end{lstlisting}
 An environment $\Gamma = (x_i: (x_i: \Unguarded))^i$ is created.
-Then, the types of the $e_i$ expressions are computed in the $\Gamma$
-environment. If a variable is used in mode $\Unguarded$ or $\Deref$ in one of
+Then, the types of the expressions $e_i$ are computed in the environment
+$\Gamma$. If a variable is used in mode $\Unguarded$ or $\Deref$ in one of
 these types, then the compiler reject this expression.
-
-%[Gabriel]: the expressoins $e_i$ .. the environment $\Gamma$.
 
 \subsection{Examples}
 \textit{TODO}
@@ -410,23 +391,21 @@ The main rules are:
 
   \infer*{ }
          {x: m \vdash x: m}
-
   \\
-
   \infer*{\Gamma, x: \_ \vdash e: m[\Delayed]}
          {\Gamma \vdash \tfun x e : m}
 
   \infer*{\Gamma_1 \vdash e_1: m[\Deref] \\
           \Gamma_2 \vdash e_2: m[\Deref]}
          {\Gamma_1 + \Gamma_2 \vdash \tapply{e_1}{e_2}: m}
-
   \\
-
   \infer*{(\Gamma_i \vdash e_i: m[\Guarded])^i}
          {\Gamma_1 + ... + \Gamma_n \vdash K(e_1, ..., e_n): m}
+  \\
+  \infer*{\Gamma_1 \vdash e_1: m[m_x + \Guarded] \\
+          \Gamma_2, x: m_x \vdash e_2: m}
+         {\Gamma_1 + \Gamma_2 \vdash \tlet{x}{e_1}{e_2}: m}
 \end{mathpar}
-% [Gabriel]: you should have the "let" rule as well, it is an
-% important and delicate rule.
 
 \subsection{Implementation}
 After having designed
