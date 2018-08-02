@@ -57,8 +57,11 @@ let rec x = 1 :: x
 creates an infinite list containing only ones.
 
 However, not all definitions can be computed. For example, definitions like:
-\lstinline|let rec x = x + 1| should be rejected by the compiler.
-% [Gabriel] again, you can use a full block for this
+\begin{lstlisting}
+let rec x = x + 1
+\end{lstlisting}
+should be rejected by the compiler, because if such a definition is accepted, it
+can lead to bugs such as segfault. % add a reference?
 % [Gabriel] Why should this be rejected by the compiler?
 
 Previously, this check relied on \textit{ad hoc} rules \cite{PreviousRules},
@@ -70,12 +73,11 @@ During this internship, I investigated the current system and (following the
 intuition of Gabriel Scherer) and rewrote it as an inference rules system. Then,
 I designed a simpler system. I implemented it in the compiler and successfully
 managed to pass the testsuite. Also, examining Jeremy Yallop's code, Gabriel and
-I found a bug and sent a pull request
-% [Gabriel] to fix it
-.
+I found a bug and sent a pull request to fix it.
 
 \section{The current system}
-% [Gabriel] Repeat that this is Jeremy Yallop's system
+The current system, since OCaml 4.06, is the one that has been proposed by
+Jeremy Yallop. Here is an overview of this system.
 
 \subsection{Access modes}
 Three \textit{access modes} are used in this system. These modes are:
@@ -89,35 +91,32 @@ Three \textit{access modes} are used in this system. These modes are:
 
 For example:
 \begin{itemize}
-  \item In the expression \lstinline|x + 1|, \lstinline|x| is accessed in the
-    $\Deref$ mode because its value must be accessed before being used as
-    a function argument.
-  \item In the expression \lstinline|1 :: x|, \lstinline|x| is accessed in the
-    $\Guarded$ mode. The address of \lstinline|x| is used in the
-    construction of the list, be it does not require the evaluation of
+  \item In the expression \lstinline|x + 1|, the variable \lstinline|x| is
+    accessed in the $\Deref$ mode because its value must be accessed before
+    being used as a function argument.
+  \item In the expression \lstinline|1 :: x|, the variable \lstinline|x| is 
+    accessed in the $\Guarded$ mode. The address of \lstinline|x| is used in
+    the construction of the list, be it does not require the evaluation of
     \lstinline|x|.
-  \item In the expression \lstinline|fun () -> x|, \lstinline|x| is accessed in
-    the $\Guarded$ mode, because the body of this function is lazily
-    evaluated, so it does not require the evaluation of \lstinline|x|.
+  \item In the expression \lstinline|fun () -> x|, the variable \lstinline|x|
+    is accessed in the $\Guarded$ mode, because the body of this function is
+    lazily evaluated, so it does not require the evaluation of \lstinline|x|.
   \item Considere the expression \lstinline |let rec x = let y = x in ...|
-    In the definition of \lstinline|y|, the variable \lstinline|x| is neither
-    evaluater, nor placed in a constructor, nor lazily evaluated. \lstinline|x|
-    is considered being used in the $\Unguarded$ mode.
+    In the definition of the variable \lstinline|y|, the variable
+    \lstinline|x| is neither evaluated, nor placed in a constructor, nor lazily
+    evaluated. \lstinline|x| is considered being used in the $\Unguarded$ mode.
 \end{itemize}
 
 \subsection{Types and Environments}
-In this system, types are maps that associate variables an access mode.
-% [Gabriel] that associate an access mode to each variable
+In this system, types $T$ are maps that associate an access mode to each
+variable.
 Intuitively, the type of an expression gives the use of variables in the
 definition of the expression.
 
-% [Gabriel] In the paragraph above you should give the metavariable
-% for types: "types $t$ are maps ...". I don't like the use of $t$ for
-% this, because it is very common to use it for expressions (terms)
-% instead of types. You could use a capital $T$, or $A, B...$, or
-% either $u$ or $U$ like "use".
+Environments $\Gamma$ are maps that associate a type to each variable.
 
-An environment is a map that associate variables to a type.
+In this system, environments are inputs and types are are outputs. The type of
+an expression is evaluated given an environment.
 
 \subsection{Operations}
 Some operations are defined on modes:
@@ -150,7 +149,7 @@ Jeremy Yallop's code.
 We can generalize this definition for types and environments:
 \begin{displaymath}
   \begin{array}{lll}
-    (t + t')           & : x \rightarrow & t(x) + t'(x) \\
+    (T + T')           & : x \rightarrow & T(x) + T'(x) \\
     (\Gamma + \Gamma') & : x \rightarrow & \Gamma(x) + \Gamma'(x)
   \end{array}
 \end{displaymath}
@@ -159,78 +158,65 @@ with:
 
 \begin{displaymath}
   \begin{array}{lll}
-    t(x) = \Guarded       & \text{if} & x \notin dom(t) \\
+    T(x) = \Guarded       & \text{if} & x \notin dom(T) \\
     \Gamma(x) = \emptyset & \text{if} & x \notin dom(\Gamma)
   \end{array}
 \end{displaymath}
 
-\subsection{Inference Rules}
-Originally, Jeremy Yallop just gave an implementation of this
-check. Gabriel Scherer proposed a first draft of inference rules
-corresponding to this implementation \cite{GascheComment1, GascheComment2}.
-% [Gabriel] I reformulated above. I think that Jeremy knew well that
-% one could use inference rules, he just didn't bother writing them
-% down in his PR.
-
-This system works as follow: conclusions have the form
-$$\Gamma \vdash e: t$$
-where $\Gamma$ is an environment, $e$ is an expression and $t$ a type. The
-environment is the input and the type is the ouput.
-
-The main rules are:
-\begin{mathpar}
-  % [Gabriel] In {mathpar}, blank lines matter. "\\" and "\n \\ \n" do
-  % not have the same semantics. You should have either \\ or a blank
-  % line between two rules, but not both. If you want to skip a line
-  % without using a blank line, just put a comment marker at the
-  % beginning. (I did it for you below)
-% 
-  \infer*{ }
-         {\Gamma, x: A \vdash x: A}
-
-  \infer*
-    {x \notin \Gamma}
-    {\Gamma \vdash x: \emptyset}
-  \\
-  \infer*{\Gamma \vdash e_1: A \\
-          \Gamma \vdash e_2: B}
-         {\Gamma \vdash \tapply{e_1}{e_2}: \inspect(A + B)}
-
-  \infer*{\Gamma \vdash e: A}
-         {\Gamma \vdash \tfun x e: \delay(A)}
-  \\
-  \infer*
-    {(\Gamma \vdash e_i: A_i)^i}
-    {\Gamma \vdash K(e_1, ..., e_n): \guard(A_1 + ... + A_n)}
-  \\
-  \infer*
-    {\Gamma \vdash e_1: A \\
-     \Gamma, x : A \vdash e_2: B}
-    {\Gamma \vdash \tlet{x}{e_1}{e_2}: discard(A) + B}
-\end{mathpar}
-% Should I give a short explanation?
-
-% [Gabriel]: yes, you should give a short informal explanation, of at
-% least one of the rules (no need to paraphrase all of them).
-
 \subsection{The Check Algorithm}
-
-% [Gabriel]: this should come before "The main rules are:" above. We
-% need to understand how the inference rules are used by the whole
-% algorithm to get an accept/reject decision, before we can read and
-% appreciate the inference rules themselves.
 
 The check is performed recursively. Every node of the abstract syntax tree
 \footnote{defined in the module \texttt{Typedtree}, that is defined is the
 files \texttt{typing/typedtree.mli} and \texttt{typing/typedtree.ml}} is
 checked. If it is a node with the form:
 \begin{lstlisting}[mathescape=true]
-  let rec $x_1$ = $e_1$ and ... and $x_n$ = $e_n$
+let rec $x_1$ = $e_1$ and ... and $x_n$ = $e_n$
 \end{lstlisting}
 An environment $\Gamma = (x_i: (x_i: \Unguarded))^i$ is created.
 Then, the types of the expressions $e_i$ are computed in the environment
-$\Gamma$. If a variable is used in mode $\Unguarded$ or $\Deref$ in one of
-these types, then the compiler reject this expression.
+$\Gamma$. If a variable is used in an unguarded mode (\textit{i.e} in mode
+$\Unguarded$ or $\Deref$) in one of these types, then the compiler rejects this
+expression.
+
+\subsection{Inference Rules}
+Originally, Jeremy Yallop just gave an implementation of this
+check. Gabriel Scherer proposed a first draft of inference rules
+corresponding to this implementation \cite{GascheComment1, GascheComment2}.
+
+This system works as follow: conclusions have the form
+$$\Gamma \vdash e: T$$
+where $\Gamma$ is an environment, $e$ is an expression and $T$ a type. As
+explained above, the environment is the input and the type is the ouput.
+
+The main rules are:
+\begin{mathpar}
+  \infer*{ }
+         {\Gamma, x: T \vdash x: T}
+
+  \infer*
+    {x \notin \Gamma}
+    {\Gamma \vdash x: \emptyset}
+  \\
+  \infer*{\Gamma \vdash e_1: T_1 \\
+          \Gamma \vdash e_2: T_2}
+         {\Gamma \vdash \tapply{e_1}{e_2}: \inspect(T_1 + T_2)}
+
+  \infer*{\Gamma \vdash e: T}
+         {\Gamma \vdash \tfun x e: \delay(T)}
+  \\
+  \infer*
+    {(\Gamma \vdash e_i: T_i)^i}
+    {\Gamma \vdash K(e_1, ..., e_n): \guard(T_1 + ... + T_n)}
+  \\
+  \infer*
+    {\Gamma \vdash e_1: T_1 \\
+     \Gamma, x : A \vdash e_2: T_2}
+    {\Gamma \vdash \tlet{x}{e_1}{e_2}: discard(T_1) + T_2}
+\end{mathpar}
+% Should I give a short explanation?
+
+% [Gabriel]: yes, you should give a short informal explanation, of at
+% least one of the rules (no need to paraphrase all of them).
 
 \subsection{Examples}
 \textit{TODO}
@@ -241,11 +227,12 @@ class declarations check.
 
 Indeed, it is possible to define classes with the syntax:
 \begin{lstlisting}[mathescape=true]
-class $a$ = let rec $x_1$ = $e_1$ and ... and $x_n$ = $e_n$ in $e$
+class $a$ = let  $x_1$ = $e_1$ and ... and $x_n$ = $e_n$ in $e$
 \end{lstlisting}
-The compiler check that the \lstinline|let rec| bindings are correct. In
-particular, it is not allowed to use the recursively defined class $a$ in an
-unguarded mode.
+The compiler check that the \lstinline|let| bindings are correct. In
+particular, it is not allowed to use the class $a$ that is being defined in the
+$\Deref$ mode (for example, when creating an object with the keyword
+\lstinline|new|).
 
 % [Gabriel]: the explanation here is wrong, and I don't know whether
 % it is on purpose (a simplification) or not. The problem is not the
@@ -257,24 +244,22 @@ unguarded mode.
 %   let x = ... new a ... in
 %   object ... end
 
-%TODO: give more details. Show the rules? The code?
 The problem was that in the previous check, the expressions affected to
-variables bound in the \lstinline|let rec| and the class expression $e$ were
+variables bound in the \lstinline|let| and the class expression $e$ were
 typed separately. For example, in the definition:
 \begin{lstlisting}[mathescape=true]
-class a = let rec x = $e_x$ in let y = $e_y$ in $e$
+class a = let x = $e_x$ in let y = $e_y$ in $e$
 \end{lstlisting}
-it is possible to make an incorrect use of the variable $x$ in the expression
-$e_y$.
+it is possible to make an incorrect use of the variable \lstinline|x| in the
+expression $e_y$.
 
 Gabriel found that the definition:
 \begin{lstlisting}
-class a = let rec x = new a in let _y = x () in object end
+class a = let x () = new a in let _y = x () in object end
 \end{lstlisting}
 caused a segfault.
-% [Gabriel]: let x () = new a in ...
 
-I wrote a patch that fix this bug, added new test and sent a pull request,
+I wrote a patch that fix this bug, added new tests and sent a pull request,
 with the help of Gabriel \cite{PullRequest}.
 
 % Note that this bug only appears since the version 4.06.
@@ -291,7 +276,8 @@ expressions are defined and evaluated.
 
 Also, a problem of Jeremy's system is that the $\Guarded$ mode has a lot of
 different meanings. To be more expressive, this mode is split into three modes
-in this system: $\Guarded$, $\Delayed$ and $\Unused$. So we now five modes:
+in this system: $\Guarded$, $\Delayed$ and $\Unused$. So there are now five
+modes:
 
 \begin{description}
   \item[Deref]: it refer to an expression that is evaluated and inspected, or to
@@ -301,7 +287,7 @@ in this system: $\Guarded$, $\Delayed$ and $\Unused$. So we now five modes:
     inspected. It also refer to an expression such that its address will used
     in such a context.
   \item[Delayed]: it refer to an expression such that its evaluation is delayed,
-    or in a variable only used in delayed expressions.
+    or to a variable only used in delayed expressions.
   \item[Unused]: it refer to an unused variable.
   \item[Unguarded]: it refer to a variable such that its value is not inspected,
     and that its address is directly placed in a variable, not placed in some
@@ -316,14 +302,15 @@ For example:
   \item In the expression \lstinline|(f x) :: y|, both the variable
     \lstinline|y| and the expression \lstinline|f x| are used in the $\Guarded$
     mode.
-  \item In the expression \lstinline|fun () -> x|, since the variable
-    \lstinline|x| is inspected just when this function is called, the variable
-    \lstinline|x| is used in the $\Delayed$ mode.
+  \item In the expression \lstinline|fun () -> 1 + x|, since the expression
+    \lstinline|1 + x| is evaluated just when this function is called, this
+    expression is used in the $\Delayed$ mode. Consequently, the variable
+    \lstinline|x| is also used in the $\Delayed$ mode.
   \item In the expression \lstinline|fun x -> y + z|, as \lstinline|x| does not
     appear in the expression \lstinline|y + z|, \lstinline|x| is used in the
     mode $\Unused$ in the last expression.
   \item In the expression \lstinline|let y = x in y|, as the locally defined
-    variable \lstinline|y| use the value \lstinline|x| but does not require the
+    variable \lstinline|y| uses the value \lstinline|x| but does not require the
     inspection of \lstinline|x|, as the address of \lstinline|x| is not placed
     in some datastructure, and as \lstinline|y| is returned, the variable
     \lstinline|x| is used in the $\Unguarded$ mode in the overall expression.
@@ -334,10 +321,15 @@ For example:
     % \lstinline|f| is used in the environment stored in this closure.
 \end{itemize}
 
-In this system, a type is simply a mode in which an experssion is evaluated. An
-environment is a map that associate to variables a mode. By default, if a
-variable does appear in the domain of this map, this variable is associated to
-$\Unused$.
+In this system, a type is simply a mode $m$ in which an experssion is
+evaluated. An environment $\Gamma$ is a map that associate to variables a mode.
+By default, if a variable does appear in the domain of this map, this variable
+is associated to $\Unused$.
+
+Contrary to the previous system, types are used as inputs and environments are
+used as outputs. Intuitively, given an expression $e$ and a mode $m$, the
+computed environment $\Gamma$ indicates how the variable not locally bound in
+$e$ must be accessed to use $e$ in the mode $m$.
 
 \subsection{Relations between modes}
 With these new modes, we can similarly define an order relation:
@@ -359,6 +351,8 @@ variable $x$ is used in the expression $e'$. This is called the
 % Gabriel: You could write e[x] for e with x that occurs in it, and
 % e'[e[x]] for e' with e[x] that occurs in it.
 
+% Alban: I don't know exactly how to use this notation, so I used my own words.
+
 For example:
 \begin{itemize}
   \item In the expression \lstinline|fun () -> x + 1|, the variable
@@ -375,14 +369,25 @@ For example:
     overall expression. Indeed, we have $\Guarded [\Deref] = \Deref$.
 \end{itemize}
 
+\subsection{The Check Algorithm}
+
+Similarly to the previous system, the check is performed when expressions of the
+form
+\begin{lstlisting}[mathescape=true]
+  let rec $x_1$ = $e_1$ and ... and $x_n$ = $e_n$
+\end{lstlisting}
+are encountered.
+
+The types of the expressions $e_i$ are computed with the mode $m = \Unguarded$
+set as the input. If a variable among the $e_i$ is used in an unguarded mode,
+then the compiler rejects this expression.
+
 \subsection{Inference rules}
-In this system, deduction rules have the form:
-$$\Gamma \vdash e: m$$
+In this system, deduction rules have the form: $$\Gamma \vdash e: m$$
 where $\Gamma$ is a context, $e$ is an expression and $m$ is a mode.
-Contrary to the previous system, the mode (or type) $m$ is the input and the
-environment $\Gamma$ is the output. Intuitively, $m$ is the mode in which the
-expression $e$ is evaluated, and $\Gamma$ indicates how the variables not
-locally bound in $e$ must be accessed to use $e$ in the mode $m$.
+
+As explained above, the mode $m$ is set as the input, and the environment
+$\Gamma$ is the output.
 
 The main rules are:
 \begin{mathpar}
@@ -408,7 +413,71 @@ The main rules are:
 \end{mathpar}
 
 \subsection{Implementation}
-After having designed
+% After having designed
+
+Here are some extracts of the implementation:
+\begin{lstlisting}
+open Asttypes
+open Typedtree
+open Types
+
+type mode =
+    Dereferenced
+  | Guarded
+  | Delayed
+  | Unused
+  | Unguarded
+
+let compos : mode -> mode -> mode =
+(* ... *)
+
+module Env :
+sig
+  type t
+  val join : t -> t -> t
+  (* ... *)
+end =
+struct
+  module M = Map.Make(Ident)
+  type t = mode M.t
+  (* ... *)
+end
+
+(* ... *)
+let rec expression : mode -> Typedtree.expression -> Env.t =
+  fun mode exp -> match exp.exp_desc with
+    (* ... *)
+    | Texp_record { fields = es; extended_expression = eo;
+                    representation = rep } ->
+        let m' = match rep with
+          | Record_float -> compos mode Dereferenced
+          | Record_unboxed _ -> mode
+          | Record_regular | Record_inlined _
+          | Record_extension -> compos mode Guarded
+        in
+        let field m = function
+            _, Kept _ -> Env.empty
+          | _, Overridden (_, e) -> expression m e
+        in
+        Env.join (array field m' es)
+                 (option expression mode eo)
+    (* ... *)
+and option : 'a. (mode -> 'a -> Env.t) -> mode -> 'a option
+                                       -> Env.t = (* ... *)
+and list : 'a. (mode -> 'a -> Env.t) -> mode -> 'a list
+                                     -> Env.t = (* ... *)
+and array : 'a. (mode -> 'a -> Env.t) -> mode -> 'a array
+                                      -> Env.t = (* ... *)
+\end{lstlisting}
+
+The main function is the function \lstinline|expression|. It takes a mode (type
+\lstinline|mode|), an expression (type \lstinline|Typedtree.expression|) and
+returns an environment (type \lstinline|Env.t|).
+
+There are also functions such as \lstinline|option|, \lstinline|list| and
+\lstinline|array| that take a datastructure (an option, a list, an array) of
+elements, that map these elements to environments (given a mode and a function
+passed in argument) and return the join of these environments.
 
 \bibliographystyle{plain}
 \bibliography{sources}
