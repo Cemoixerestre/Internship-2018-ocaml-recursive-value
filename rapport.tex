@@ -38,11 +38,8 @@
 
 \maketitle
 
-This work has been done in an internship in Inria Saclay, team Parsifal. It was
-supervised by Gabriel Scherer.
-
-% [Gabriel] You should give the specific dates of your internship, to
-% situate the work in time.
+This work has been done in an internship in Inria Saclay, team Parsifal, during
+June and July 2018. It was supervised by Gabriel Scherer.
 
 \section{Introduction}
 OCaml is a statically-types functionnal language of the ML family. One of the
@@ -234,16 +231,6 @@ particular, it is not allowed to use the class $a$ that is being defined in the
 $\Deref$ mode (for example, when creating an object with the keyword
 \lstinline|new|).
 
-% [Gabriel]: the explanation here is wrong, and I don't know whether
-% it is on purpose (a simplification) or not. The problem is not the
-% `let rec`, we don't need `rec` to create bad examples (and I think
-% it would be clearer if you did *not* use `rec` in this sectoin), it
-% is about using the class with `new` from within the class definition:
-%
-% class a =
-%   let x = ... new a ... in
-%   object ... end
-
 The problem was that in the previous check, the expressions affected to
 variables bound in the \lstinline|let| and the class expression $e$ were
 typed separately. For example, in the definition:
@@ -411,6 +398,19 @@ The main rules are:
           \Gamma_2, x: m_x \vdash e_2: m}
          {\Gamma_1 + \Gamma_2 \vdash \tlet{x}{e_1}{e_2}: m}
 \end{mathpar}
+
+% I hope this explanation is somehow understandable. Have you got some idea to
+% make it clearer?
+For example, the \lstinline|let| rule works as follow:
+\begin{itemize}
+  \item The right expression $e_2$ is typed under the environment $m$.
+  \item As the expression $e_1$ is evaluated in the surounding mode $m$ (there
+    is no delayed evaluation), it is evaluated at least in the mode
+    $m[\Guarded]$. As its value is placed inside the variable $x$ which later
+    is used in the mode $m_x$ in $e_2$, it is at least in the mode $m[m_x]$.
+    Therefore, $e_1$ is evaluated under the mode
+    $m[\Guarded] + m[m_x] = m[m_x + \Guarded]$.
+\end{itemize}
 
 \subsection{Implementation}
 % After having designed
