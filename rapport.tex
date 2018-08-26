@@ -56,6 +56,9 @@ following piece of code that defines an infinite list containing only ones.
 \begin{lstlisting}
 let rec x = 1 :: x
 \end{lstlisting}
+% [Gabriel]: point out that this cyclic list does not consume an
+% infinite amount of memory, it is represented as a single list cell
+% pointing to itself.
 
 However, not all definitions can be computed. For example, definitions like:
 \begin{lstlisting}
@@ -437,6 +440,11 @@ For example, the \lstinline|let| rule works as follow:
 \begin{itemize}
   \item The right expression $e_2$ is typed under the environment $m$. The
     resulting environment is $\Gamma_2$.
+
+  % [Gabriel]: e2 is typed under m *because*, in the language semantics,
+  % evaluating (let x = e1 in e2) returns the result of evaluating e2,
+  % so both (let .. ) and just (e2) are evaluated in the same usage context.
+
   \item As the right expression $e_1$ is evaluated in the surrounding mode $m$
     (there is no delayed evaluation), it is evaluated at least in the mode
     $m[\Guarded]$. As its value is placed inside the variable $x$ which later
@@ -444,8 +452,15 @@ For example, the \lstinline|let| rule works as follow:
     Therefore, $e_1$ is evaluated under the mode
     $m[\Guarded] + m[m_x] = m[m_x + \Guarded]$. The resulting environment is
     $\Gamma_1$.
+
+    % [Gabriel]: maybe you could start by explaining m[m_x] (with the
+    % example where m_x is Deref?), and then point out that even if
+    % (e1) is only used under a delay in e2, it is computed right away
+    % by the let-binding (OCaml is a strict language), so its usage mode
+    % must be at least Guarded.
 \end{itemize}
 So, the environment to evaluate this expression is $\Gamma_1 + \Gamma_2$.
+
 
 \subsection{Implementation}
 % After having designed
@@ -464,9 +479,7 @@ type mode =
   | Unused
   | Unguarded
 
-let compos : mode -> mode -> mode =
-
-(* ... *)
+let compos : mode -> mode -> mode = (* ... *)
 
 module Env :
 sig
@@ -533,6 +546,7 @@ let is_valid_recursive_expression: Ident.t list ->
                                    Typedtree.class_expr ->
                                    bool = (* ... *)
 \end{lstlisting}
+% [Gabriel]: you repeat `let is_valid_recursive_expression` twice in the code above
 
 The main function is the function \lstinline|expression|. It takes a mode (type
 \lstinline|mode|), an expression (type \lstinline|Typedtree.expression|) and
@@ -544,6 +558,19 @@ recursion, the list of their associated expressions \lstinline|expr|, and
 return \lstinline|true| if this definition should be accepted. Note that this
 function also checks that some recursively defined variables of a size knows at
 the compilation time, but I did not care about it during the internship.
+
+% [Gabriel]: I would remove is_valid_recursive_expression and its
+% discussion from the report; you have not talked about size
+% computation at all, so this is confusing and not at the core of your
+% topic. I think it's okay to just talk about the "judgment
+% functions", not the caller itself. (You give the idea in "The Check
+% Algorithm" section, although maybe you could also have a subsection
+% about the (high-level view of the) check algorithm in your system.)
+
+% [Gabriel]: on the other side, it could be nice to also show the
+% signature of `structure_item `value_bindings` and `pattern`, and
+% briefly mention them in the text, to show that there are more
+% functions for various syntactic categories of the language.
 
 There are also functions such as \lstinline|option|, \lstinline|list| and
 \lstinline|array| that take a data structure (an option, a list, an array) of
