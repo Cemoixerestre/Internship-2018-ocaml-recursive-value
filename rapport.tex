@@ -28,8 +28,6 @@
 % \newcommand{\mode}[1]{\text{\textbf{#1}}}
 
 \title{Internship Report: Rethinking OCaml Recursive Values}
-% Should I include a kind of subtitle to indicate that this is a "rapport de
-% stage" for my licence?
 
 \author{Alban Reynaud}
 \date{}
@@ -210,13 +208,14 @@ The main rules are:
      \Gamma, x : A \vdash e_2: T_2}
     {\Gamma \vdash \tlet{x}{e_1}{e_2}: discard(T_1) + T_2}
 \end{mathpar}
-% Should I give a short explanation?
+% Should I give an explanation of the `let` rule or of another rule?
+% The `let` rule is the more complex, but I'm not sure to understand
+% "everything" about it. I guess that if I try to describe it, my explanation
+% would be unclear.
 
-% [Gabriel]: yes, you should give a short informal explanation, of at
-% least one of the rules (no need to paraphrase all of them).
-
-\subsection{Examples}
-\textit{TODO}
+% The other rules are pretty straightforward, it could also be intersting to
+% describe one of them. Someone who reads this report quickly could get the idea
+% of the system without going deep into details.
 
 \subsection{Bug in the implementation}
 When examining the code, Gabriel and I found a bug. It appears in the recursive
@@ -252,9 +251,14 @@ with the help of Gabriel \cite{PullRequest}.
 % Note that this bug only appears since the version 4.06.
 
 \section{A new system}
+One of the problem of the previous system is that it is quite complicated. The
+checker manipulates environments that are maps of maps. It makes it harder to
+consider proving that expressions accepted by the checker are well-formed.
 
-% TODO: give an short introduction, with motivations, and cite comments of
-% Gabriel about this system.
+Gabriel proposed the idea of another simpler system in September 2017, under the
+discussion about Jeremy Yallop's proposal \cite{SchererRules}.
+
+The next part of my work consisted in developping such a system.
 
 \subsection{Modes, types and environments}
 In Jeremy's system, access modes refer to way variables are used in expressions.
@@ -403,19 +407,23 @@ The main rules are:
 % make it clearer?
 For example, the \lstinline|let| rule works as follow:
 \begin{itemize}
-  \item The right expression $e_2$ is typed under the environment $m$.
+  \item The right expression $e_2$ is typed under the environment $m$. The
+    resulting environment is $\Gamma_2$.
   \item As the expression $e_1$ is evaluated in the surounding mode $m$ (there
     is no delayed evaluation), it is evaluated at least in the mode
     $m[\Guarded]$. As its value is placed inside the variable $x$ which later
     is used in the mode $m_x$ in $e_2$, it is at least in the mode $m[m_x]$.
     Therefore, $e_1$ is evaluated under the mode
-    $m[\Guarded] + m[m_x] = m[m_x + \Guarded]$.
+    $m[\Guarded] + m[m_x] = m[m_x + \Guarded]$. The resulting environment is
+    $\Gamma_1$.
 \end{itemize}
+So, the environment to evaluate this expression is $\Gamma_1 + \Gamma_2$.
 
 \subsection{Implementation}
 % After having designed
 
 Here are some extracts of the implementation:
+% Should I include more code?
 \begin{lstlisting}
 open Asttypes
 open Typedtree
@@ -468,16 +476,50 @@ and list : 'a. (mode -> 'a -> Env.t) -> mode -> 'a list
                                      -> Env.t = (* ... *)
 and array : 'a. (mode -> 'a -> Env.t) -> mode -> 'a array
                                       -> Env.t = (* ... *)
+
+(* ... *)
+let is_valid_recursive_expression idlist expr =
+  let ty = expression Unguarded expr in
+  match Env.unguarded ty idlist, Env.dependent ty idlist,
+        classify_expression expr with
+  | _ :: _, _, _ (* The expression inspects rec-bound variables *)
+  | _, _ :: _, Dynamic -> (* The expression depends on rec-bound variables
+                              and its size is unknown *)
+      false
+  | [], _, Static (* The expression has known size *)
+  | [], [], Dynamic -> (* The expression has unknown size,
+                          but does not depend on rec-bound variables *)
+      true
 \end{lstlisting}
 
 The main function is the function \lstinline|expression|. It takes a mode (type
 \lstinline|mode|), an expression (type \lstinline|Typedtree.expression|) and
 returns an environment (type \lstinline|Env.t|).
 
+This function is used in the function \lstinline|is_valid_recursive_expression|.
+It takes a list \lstinline|idlist| of variables that are mutually defined with
+recursion, the list of their associated expressions \lstinline|expr|, and
+return \lstinline|true| if this definition should be accepted. Note that this
+function also checks that some recursively defined variables of a size knows at
+the compilation time, but I did not care about it during the internship.
+
 There are also functions such as \lstinline|option|, \lstinline|list| and
 \lstinline|array| that take a datastructure (an option, a list, an array) of
 elements, that map these elements to environments (given a mode and a function
-passed in argument) and return the join of these environments.
+passed in argument) and return the join of these environments. For example, in
+the case \lstinline|Texp_record|, the array \lstinline|eo| contains the
+expression of the elements of the records. The element are typed under an
+environment \lstinline|m'| with the function \lstinline|expression|, and their
+environments are joined.
+
+% TODO: give a reference about the optimization of float records.
+% TODO: complete
+As we can see, there are many more subtilities in the implementation of the
+check than in the rules, which cover only a restricted subset of OCaml. For
+example, because of an optimization performed by the compiler, there is a
+special treatment to records of floats.
+
+\section*{Conclusion and Future Work}
 
 \bibliographystyle{plain}
 \bibliography{sources}
