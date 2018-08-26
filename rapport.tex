@@ -42,33 +42,48 @@ June and July 2018. It was supervised by Gabriel Scherer.
 \section{Introduction}
 OCaml is a statically-types functionnal language of the ML family. One of the
 features of the language is the \lstinline|let rec| operator. It is usually
-used to define recursive functions, but it can also be used to define recursive
-values.
+used to define recursive functions. For example, the following code defines the
+factorial function:
 
-For example, the following code:
+\begin{lstlisting}
+let rec fac x =
+  if x = 0 then 1
+  else x * (fac (x - 1))
+\end{lstlisting}
+
+This operator could also be used to define recursive values, such as the
+following piece of code that defines an infinite list containing only ones.
 \begin{lstlisting}
 let rec x = 1 :: x
 \end{lstlisting}
-creates an infinite list containing only ones.
 
 However, not all definitions can be computed. For example, definitions like:
 \begin{lstlisting}
 let rec x = x + 1
 \end{lstlisting}
-should be rejected by the compiler, because if such a definition is accepted, it
-can lead to bugs such as segfault. % add a reference?
-% [Gabriel] Why should this be rejected by the compiler?
+should be rejected by the compiler. In fact, it is impossible to give a meaning
+to this definition. Furthermore, the variable \lstinline|x|, which is typed as
+an integer, is used in its own definition. To compute \lstinline|x + 1|, the
+variable \lstinline|x| should have a known address and a value. As it may not
+have been allocated, and that its value must be undefined, accepting such a
+definition could lead to segfaults or non-determinism.
 
-Previously, this check relied on \textit{ad hoc} rules \cite{PreviousRules},
-which caused several issues. In 2016, Jeremy Yallop proposed a new check,
-designed as a simplified typing system \cite{Yallop}. One of the problem is that
-his system is too complex, and it is hard to reason about.
+Functional languages have different ways to deal with recursive values. The
+ML language rejects all recursive definitions that are not recursive functions.
+The Haskell language, due to lazy evaluation, accepts every well-typed recursive
+definitions, although some of them lead to infinite computation.
+
+In OCaml, this check previously relied on \textit{ad hoc} rules
+\cite{PreviousRules}, which caused several issues. In 2016, Jeremy Yallop
+proposed a new check, designed as a simplified typing system \cite{Yallop}.
+One of the problem is that his system is too complex, and it is hard to reason
+about.
 
 During this internship, I investigated the current system and (following the
 intuition of Gabriel Scherer) and rewrote it as an inference rules system. Then,
 I designed a simpler system. I implemented it in the compiler and successfully
-managed to pass the testsuite. Also, examining Jeremy Yallop's code, Gabriel and
-I found a bug and sent a pull request to fix it.
+managed to pass the test-suite. Also, examining Jeremy Yallop's code, Gabriel
+and I found a bug and sent a pull request to fix it.
 
 \section{The current system}
 The current system, since OCaml 4.06, is the one that has been proposed by
@@ -96,7 +111,7 @@ For example:
   \item In the expression \lstinline|fun () -> x|, the variable \lstinline|x|
     is accessed in the $\Guarded$ mode, because the body of this function is
     lazily evaluated, so it does not require the evaluation of \lstinline|x|.
-  \item Considere the expression \lstinline |let rec x = let y = x in ...|
+  \item Consider the expression \lstinline |let rec x = let y = x in ...|
     In the definition of the variable \lstinline|y|, the variable
     \lstinline|x| is neither evaluated, nor placed in a constructor, nor lazily
     evaluated. \lstinline|x| is considered being used in the $\Unguarded$ mode.
@@ -181,7 +196,7 @@ corresponding to this implementation \cite{GascheComment1, GascheComment2}.
 This system works as follow: conclusions have the form
 $$\Gamma \vdash e: T$$
 where $\Gamma$ is an environment, $e$ is an expression and $T$ a type. As
-explained above, the environment is the input and the type is the ouput.
+explained above, the environment is the input and the type is the output.
 
 The main rules are:
 \begin{mathpar}
@@ -205,8 +220,8 @@ The main rules are:
   \\
   \infer*
     {\Gamma \vdash e_1: T_1 \\
-     \Gamma, x : A \vdash e_2: T_2}
-    {\Gamma \vdash \tlet{x}{e_1}{e_2}: discard(T_1) + T_2}
+     \Gamma, x : T_1 \vdash e_2: T_2}
+    {\Gamma \vdash \tlet{x}{e_1}{e_2}: \discard(T_1) + T_2}
 \end{mathpar}
 % Should I give an explanation of the `let` rule or of another rule?
 % The `let` rule is the more complex, but I'm not sure to understand
@@ -216,6 +231,19 @@ The main rules are:
 % The other rules are pretty straightforward, it could also be intersting to
 % describe one of them. Someone who reads this report quickly could get the idea
 % of the system without going deep into details.
+
+For example, the \lstinline|let| rule works as follow:
+\begin{itemize}
+  \item The right expression $e_1$ is typed under the environment $\Gamma$. The
+    returned type is $T_1$.
+  \item The environment in which $e_2$ is evaluated contains one more variable,
+    that is $x$ containing the value of $e_1$. So $x: T_1$ is added to $\Gamma$
+    and $e_2$ is typed under this environment. The returned type is $T_2$.
+  \item The type of the overall expression is $\discard(T_1) + T_2$. Indeed,
+    a variable dereferenced in $e_1$ is used in the mode $\Deref$ in the overall
+    expression However, a variable in used in the mode $\Unguarded$ in $e_1$,
+    its access mode in the overall expression is its access mode in $e_2$.
+\end{itemize}
 
 \subsection{Bug in the implementation}
 When examining the code, Gabriel and I found a bug. It appears in the recursive
@@ -258,7 +286,7 @@ consider proving that expressions accepted by the checker are well-formed.
 Gabriel proposed the idea of another simpler system in September 2017, under the
 discussion about Jeremy Yallop's proposal \cite{SchererRules}.
 
-The next part of my work consisted in developping such a system.
+The next part of my work consisted in developing such a system.
 
 \subsection{Modes, types and environments}
 In Jeremy's system, access modes refer to way variables are used in expressions.
@@ -274,7 +302,7 @@ modes:
   \item[Deref]: it refer to an expression that is evaluated and inspected, or to
     a variable such that its value is inspected.
   \item[Guarded]: it refer to a variable such that its address is used in some
-    datastructure (for example: a constructor) but the variable has not been
+    data-structure (for example: a constructor) but the variable has not been
     inspected. It also refer to an expression such that its address will used
     in such a context.
   \item[Delayed]: it refer to an expression such that its evaluation is delayed,
@@ -282,7 +310,7 @@ modes:
   \item[Unused]: it refer to an unused variable.
   \item[Unguarded]: it refer to a variable such that its value is not inspected,
     and that its address is directly placed in a variable, not placed in some
-    datastructure.
+    data-structure.
 \end{description}
 
 For example:
@@ -303,16 +331,16 @@ For example:
   \item In the expression \lstinline|let y = x in y|, as the locally defined
     variable \lstinline|y| uses the value \lstinline|x| but does not require the
     inspection of \lstinline|x|, as the address of \lstinline|x| is not placed
-    in some datastructure, and as \lstinline|y| is returned, the variable
+    in some data-structure, and as \lstinline|y| is returned, the variable
     \lstinline|x| is used in the $\Unguarded$ mode in the overall expression.
-
-  % \item A more subtle example: in the expression
-   % \lstinline|let rec f = fun() -> f in f| (the option \verb|-rectypes| must
-    %be passed to the compiler to accept it), the address of the variable
-    % \lstinline|f| is used in the environment stored in this closure.
+  \item A more subtle example: in the expression
+    \lstinline|let rec f = fun () -> f in f| (the option \verb|-rectypes| must
+    be passed to the compiler to accept it), the address of the variable
+    \lstinline|f| is used in the environment stored in this closure.
+    The variable \lstinline|f| is used in the $\Guarded$ mode.
 \end{itemize}
 
-In this system, a type is simply a mode $m$ in which an experssion is
+In this system, a type is simply a mode $m$ in which an expression is
 evaluated. An environment $\Gamma$ is a map that associate to variables a mode.
 By default, if a variable does appear in the domain of this map, this variable
 is associated to $\Unused$.
@@ -356,7 +384,7 @@ For example:
 
   \item In the expression \lstinline|Some (x + 1)|, even if the expression
     \lstinline|x + 1| is used in mode $\Guarded$, the variable \lstinline|x|
-    must be inpected to evaluate both the expression \lstinline|x + 1| and the
+    must be inspected to evaluate both the expression \lstinline|x + 1| and the
     overall expression. Indeed, we have $\Guarded [\Deref] = \Deref$.
 \end{itemize}
 
@@ -409,8 +437,8 @@ For example, the \lstinline|let| rule works as follow:
 \begin{itemize}
   \item The right expression $e_2$ is typed under the environment $m$. The
     resulting environment is $\Gamma_2$.
-  \item As the expression $e_1$ is evaluated in the surounding mode $m$ (there
-    is no delayed evaluation), it is evaluated at least in the mode
+  \item As the right expression $e_1$ is evaluated in the surrounding mode $m$
+    (there is no delayed evaluation), it is evaluated at least in the mode
     $m[\Guarded]$. As its value is placed inside the variable $x$ which later
     is used in the mode $m_x$ in $e_2$, it is at least in the mode $m[m_x]$.
     Therefore, $e_1$ is evaluated under the mode
@@ -437,6 +465,7 @@ type mode =
   | Unguarded
 
 let compos : mode -> mode -> mode =
+
 (* ... *)
 
 module Env :
@@ -452,10 +481,12 @@ struct
 end
 
 (* ... *)
+
 let rec expression : mode -> Typedtree.expression -> Env.t =
   fun mode exp -> match exp.exp_desc with
     (* ... *)
-    | Texp_record { fields = es; extended_expression = eo;
+    | Texp_record { fields = es;
+                    extended_expression = eo;
                     representation = rep } ->
         let m' = match rep with
           | Record_float -> compos mode Dereferenced
@@ -470,6 +501,7 @@ let rec expression : mode -> Typedtree.expression -> Env.t =
         Env.join (array field m' es)
                  (option expression mode eo)
     (* ... *)
+
 and option : 'a. (mode -> 'a -> Env.t) -> mode -> 'a option
                                        -> Env.t = (* ... *)
 and list : 'a. (mode -> 'a -> Env.t) -> mode -> 'a list
@@ -478,18 +510,28 @@ and array : 'a. (mode -> 'a -> Env.t) -> mode -> 'a array
                                       -> Env.t = (* ... *)
 
 (* ... *)
+
 let is_valid_recursive_expression idlist expr =
   let ty = expression Unguarded expr in
   match Env.unguarded ty idlist, Env.dependent ty idlist,
         classify_expression expr with
-  | _ :: _, _, _ (* The expression inspects rec-bound variables *)
-  | _, _ :: _, Dynamic -> (* The expression depends on rec-bound variables
-                              and its size is unknown *)
+  | _ :: _, _, _ (* The expression inspects rec-bound
+                    variables *)
+  | _, _ :: _, Dynamic -> (* The expression depends on
+                              rec-bound variables and
+                              its size is unknown *)
       false
   | [], _, Static (* The expression has known size *)
   | [], [], Dynamic -> (* The expression has unknown size,
-                          but does not depend on rec-bound variables *)
+                          but does not depend on
+                          rec-bound variables *)
       true
+
+(* ... *)
+
+let is_valid_recursive_expression: Ident.t list ->
+                                   Typedtree.class_expr ->
+                                   bool = (* ... *)
 \end{lstlisting}
 
 The main function is the function \lstinline|expression|. It takes a mode (type
@@ -504,22 +546,61 @@ function also checks that some recursively defined variables of a size knows at
 the compilation time, but I did not care about it during the internship.
 
 There are also functions such as \lstinline|option|, \lstinline|list| and
-\lstinline|array| that take a datastructure (an option, a list, an array) of
+\lstinline|array| that take a data structure (an option, a list, an array) of
 elements, that map these elements to environments (given a mode and a function
 passed in argument) and return the join of these environments. For example, in
 the case \lstinline|Texp_record|, the array \lstinline|eo| contains the
-expression of the elements of the records. The element are typed under an
-environment \lstinline|m'| with the function \lstinline|expression|, and their
+expression of the elements of the records. The element are typed with the mode
+mode \lstinline|m'| with the function \lstinline|expression|, and their
 environments are joined.
 
 % TODO: give a reference about the optimization of float records.
 % TODO: complete
-As we can see, there are many more subtilities in the implementation of the
+As we can see, there are many more subtleties in the implementation of the
 check than in the rules, which cover only a restricted subset of OCaml. For
-example, because of an optimization performed by the compiler, there is a
-special treatment to records of floats.
+example, because of an optimization performed by the compiler, floating-point
+numbers in all-float records are unboxed. As a consequence, codes such as:
+\begin{lstlisting}
+type wrapper = {value: float}
+let rec x = 0.0 and w = {value = x}
+\end{lstlisting}
+are unsafe and should be refused, but would be safe if the field
+\lstinline|value| of the type \lstinline|wrapper| was not \lstinline|float|.
+This is why in the case of float-only records, the field expressions are typed
+with the mode $m' = m[\Deref]$.
+
+There are also special cases for unboxed records and extension records.
+
+Though my implementation do not cover all the constructions that can be found in
+the language, I managed to make it pass all the tests from the compiler's
+test-suite. Gabriel sent a pull request that is currently being discussed
+\cite{NewSystemPullRequest}.
 
 \section*{Conclusion and Future Work}
+During this internship, I analysed the current recursive value checker in OCaml
+and formalized it as an inference rule system. I developed a new system and
+implemented it. I passed all the tests from the compiler's testsuite. With
+Gabriel Scherer, I found a bug in the implementation and proposed a fix.
+
+In the future, if this system is integrated in the compiler, it could be
+interesting to continue this work in different ways. Some constraints of the
+system could be relaxed to accept safe recursive definitions that are currently
+rejected. It could also be interesting to investigate the size checker which is
+currently pretty conservative.
+
+This system could also be used to formally prove that accepted definitions are
+correct and prevent some bugs. It could also be interesting to compare this
+system to other approaches of the problem proposed in the literature, such as
+extensions proposals \cite{jeannin2012cocaml} or type systems
+\cite{dreyer2004type}.
+
+Finally, the computed environments could be used by the compiler in other
+modules.
+
+Personally, I enjoyed this experience in a research team. Now, I feel more
+familiar with inference rules design. With the implementation part, I learnt a
+lot about git and github. My only regret is that I would have liked to have
+more time to explore other parts of the subject.
 
 \bibliographystyle{plain}
 \bibliography{sources}
