@@ -35,8 +35,8 @@ Règles de Jeremy, conception des nouvelles règles, implémentation, bug
 - `let rec x = 1 + x`.
 
 ## Jeremy's System ##
-- u ::= (x : m)*
-- Γ ::= (x : u)*
+- u ::= (x : m)* *
+- Γ ::= (x : u)* *
 - Γ |- e : u
 - Check algorithm
 
@@ -45,11 +45,28 @@ Règles de Jeremy, conception des nouvelles règles, implémentation, bug
 let x = e1 in e2
 
 ## New system ##
+- type = mode
+- Γ ::= (x : m)* *
+- Γ |- e : u
+
+## Composition de mode? ##
+- principe
+- règles
+- exemple
 
 ## One Typing Rule ##
+let
 
 ## Implementation ##
-- one case: ifthenels
+- one case: ifthenelse
 - testsuite
 
+## Bug ##
+- Pour les règles `class c = let x = e in ce`
+- Les expressions `e` et `ce` étaient typées séparément
+- `class c = let x () = new c in let _y = x () in object end`
+- Un pull request a été soumise
+
 ## Conclusion ##
+
+## Future Work? ##

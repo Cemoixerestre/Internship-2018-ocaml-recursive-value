@@ -32,12 +32,18 @@
 \author{Alban Reynaud}
 \date{}
 
+% I know it's cheating!
+\addtolength{\oddsidemargin}{0.1cm}
+\addtolength{\evensidemargin}{0.1cm}
+
 \begin{document}
 
 \maketitle
 
 This work has been done in an internship in Inria Saclay, team Parsifal, during
 June and July 2018. It was supervised by Gabriel Scherer.
+
+\pagebreak
 
 \section{Introduction}
 OCaml is a statically-types functional language of the ML family. One of the
@@ -56,9 +62,8 @@ following piece of code that defines an infinite list containing only ones.
 \begin{lstlisting}
 let rec x = 1 :: x
 \end{lstlisting}
-% [Gabriel]: point out that this cyclic list does not consume an
-% infinite amount of memory, it is represented as a single list cell
-% pointing to itself.
+Note that this infinite list is a cyclic list. It uses a finite amount of
+memory, because it is only composed by a cons-cell referencing itself.
 
 However, not all definitions can be computed. For example, definitions like:
 \begin{lstlisting}
@@ -87,6 +92,8 @@ intuition of Gabriel Scherer) and rewrote it as an inference rules system. Then,
 I designed a simpler system. I implemented it in the compiler and successfully
 managed to pass the test-suite. Also, examining Jeremy Yallop's code, Gabriel
 and I found a bug and sent a pull request to fix it.
+
+\pagebreak
 
 \section{The current system}
 The current system, since OCaml 4.06, is the one that has been proposed by
@@ -130,6 +137,8 @@ Environments $\Gamma$ are maps that associate a type to each variable.
 
 In this system, environments are inputs and types are are outputs. The type of
 an expression is evaluated given an environment.
+
+\pagebreak
 
 \subsection{Operations}
 Some operations are defined on modes:
@@ -191,6 +200,8 @@ $\Gamma$. If a variable is used in an unguarded mode (\textit{i.e} in mode
 $\Unguarded$ or $\Deref$) in one of these types, then the compiler rejects this
 expression.
 
+\pagebreak
+
 \subsection{Inference Rules}
 Originally, Jeremy Yallop just gave an implementation of this
 check. Gabriel Scherer proposed a first draft of inference rules
@@ -213,7 +224,7 @@ The main rules are:
   \infer*{\Gamma \vdash e_1: T_1 \\
           \Gamma \vdash e_2: T_2}
          {\Gamma \vdash \tapply{e_1}{e_2}: \inspect(T_1 + T_2)}
-
+  \\
   \infer*{\Gamma \vdash e: T}
          {\Gamma \vdash \tfun x e: \delay(T)}
   \\
@@ -247,6 +258,8 @@ For example, the \lstinline|let| rule works as follow:
     expression However, a variable in used in the mode $\Unguarded$ in $e_1$,
     its access mode in the overall expression is its access mode in $e_2$.
 \end{itemize}
+
+\pagebreak
 
 \subsection{Bug in the implementation}
 When examining the code, Gabriel and I found a bug. It appears in the recursive
@@ -353,6 +366,8 @@ used as outputs. Intuitively, given an expression $e$ and a mode $m$, the
 computed environment $\Gamma$ indicates how the variable not locally bound in
 $e$ must be accessed to use $e$ in the mode $m$.
 
+\pagebreak
+
 \subsection{Relations between modes}
 With these new modes, we can similarly define an order relation:
 $$\Deref > \Unguarded > \Guarded > \Delayed > \Unused$$
@@ -404,6 +419,8 @@ The types of the expressions $e_i$ are computed with the mode $m = \Unguarded$
 set as the input. If a variable among the $e_i$ is used in an unguarded mode,
 then the compiler rejects this expression.
 
+\pagebreak
+
 \subsection{Inference rules}
 In this system, deduction rules have the form: $$\Gamma \vdash e: m$$
 where $\Gamma$ is a context, $e$ is an expression and $m$ is a mode.
@@ -421,7 +438,7 @@ The main rules are:
   \\
   \infer*{\Gamma, x: \_ \vdash e: m[\Delayed]}
          {\Gamma \vdash \tfun x e : m}
-
+  \\
   \infer*{\Gamma_1 \vdash e_1: m[\Deref] \\
           \Gamma_2 \vdash e_2: m[\Deref]}
          {\Gamma_1 + \Gamma_2 \vdash \tapply{e_1}{e_2}: m}
@@ -438,12 +455,8 @@ The main rules are:
 % make it clearer?
 For example, the \lstinline|let| rule works as follow:
 \begin{itemize}
-  \item The right expression $e_2$ is typed under the environment $m$. The
-    resulting environment is $\Gamma_2$.
-
-  % [Gabriel]: e2 is typed under m *because*, in the language semantics,
-  % evaluating (let x = e1 in e2) returns the result of evaluating e2,
-  % so both (let .. ) and just (e2) are evaluated in the same usage context.
+  \item The right expression $e_2$ is typed under the environment $m$, because
+    $e_2$ is the returned expression. The resulting environment is $\Gamma_2$.
 
   \item As the right expression $e_1$ is evaluated in the surrounding mode $m$
     (there is no delayed evaluation), it is evaluated at least in the mode
@@ -461,12 +474,11 @@ For example, the \lstinline|let| rule works as follow:
 \end{itemize}
 So, the environment to evaluate this expression is $\Gamma_1 + \Gamma_2$.
 
+\pagebreak
 
 \subsection{Implementation}
-% After having designed
-
 Here are some extracts of the implementation:
-% Should I include more code?
+
 \begin{lstlisting}
 open Asttypes
 open Typedtree
@@ -521,51 +533,15 @@ and list : 'a. (mode -> 'a -> Env.t) -> mode -> 'a list
                                      -> Env.t = (* ... *)
 and array : 'a. (mode -> 'a -> Env.t) -> mode -> 'a array
                                       -> Env.t = (* ... *)
+and value_binding : Env.t -> Ident.t list -> mode
+                          -> Typedtree.value_binding
+                          -> Env.t = (* ... *)
+and pattern : Env.t -> mode -> pattern -> mode = (* ... *)
 
-(* ... *)
-
-let is_valid_recursive_expression idlist expr =
-  let ty = expression Unguarded expr in
-  match Env.unguarded ty idlist, Env.dependent ty idlist,
-        classify_expression expr with
-  | _ :: _, _, _ (* The expression inspects rec-bound
-                    variables *)
-  | _, _ :: _, Dynamic -> (* The expression depends on
-                              rec-bound variables and
-                              its size is unknown *)
-      false
-  | [], _, Static (* The expression has known size *)
-  | [], [], Dynamic -> (* The expression has unknown size,
-                          but does not depend on
-                          rec-bound variables *)
-      true
-
-(* ... *)
-
-let is_valid_recursive_expression: Ident.t list ->
-                                   Typedtree.class_expr ->
-                                   bool = (* ... *)
 \end{lstlisting}
-% [Gabriel]: you repeat `let is_valid_recursive_expression` twice in the code above
-
 The main function is the function \lstinline|expression|. It takes a mode (type
 \lstinline|mode|), an expression (type \lstinline|Typedtree.expression|) and
 returns an environment (type \lstinline|Env.t|).
-
-This function is used in the function \lstinline|is_valid_recursive_expression|.
-It takes a list \lstinline|idlist| of variables that are mutually defined with
-recursion, the list of their associated expressions \lstinline|expr|, and
-return \lstinline|true| if this definition should be accepted. Note that this
-function also checks that some recursively defined variables of a size knows at
-the compilation time, but I did not care about it during the internship.
-
-% [Gabriel]: I would remove is_valid_recursive_expression and its
-% discussion from the report; you have not talked about size
-% computation at all, so this is confusing and not at the core of your
-% topic. I think it's okay to just talk about the "judgment
-% functions", not the caller itself. (You give the idea in "The Check
-% Algorithm" section, although maybe you could also have a subsection
-% about the (high-level view of the) check algorithm in your system.)
 
 % [Gabriel]: on the other side, it could be nice to also show the
 % signature of `structure_item `value_bindings` and `pattern`, and
@@ -581,8 +557,11 @@ expression of the elements of the records. The element are typed with the mode
 mode \lstinline|m'| with the function \lstinline|expression|, and their
 environments are joined.
 
-% TODO: give a reference about the optimization of float records.
-% TODO: complete
+Also, there are functions such as \lstinline|pattern| that deals with pattern,
+\lstinline|value_binding| that deals with the sub-part $p = e$ (with $p$ a
+pattern and $e$ an expression) in \lstinline|let| rules, as well functions that
+deal with other syntactic features of OCaml.
+
 As we can see, there are many more subtleties in the implementation of the
 check than in the rules, which cover only a restricted subset of OCaml. For
 example, because of an optimization performed by the compiler, floating-point

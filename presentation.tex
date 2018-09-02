@@ -1,0 +1,331 @@
+\documentclass{beamer}
+
+\usepackage[utf8]{inputenc}
+\usepackage{graphicx}
+\usepackage{amsmath}
+\usepackage{mathpartir}
+\usepackage{listings}
+\usepackage{minted}
+\usepackage[french]{babel}
+
+\usetheme{Warsaw}
+
+\newcommand{\tfun}[2]{\mathtt{fun}~#1 \to #2}
+\newcommand{\tapply}[2]{#1~#2}
+\newcommand{\tlet}[3]{\mathtt{let~}#1=#2\mathtt{~in~}#3}
+\newcommand{\tifthenelse}[3]{\mathtt{if~}#1\mathtt{~then~}#2\mathtt{~else~}#3}
+
+\newcommand{\Deref}{\mathsf{Deref}}
+\newcommand{\Unguarded}{\mathsf{Unguarded}}
+\newcommand{\Guarded}{\mathsf{Guarded}}
+\newcommand{\Delayed}{\mathsf{Delayed}}
+\newcommand{\Unused}{\mathsf{Unused}}
+
+\newcommand{\backupbegin}{
+   \newcounter{finalframe}
+   \setcounter{finalframe}{\value{framenumber}}
+}
+\newcommand{\backupend}{
+   \setcounter{framenumber}{\value{finalframe}}
+}
+
+\addtobeamertemplate{navigation symbols}{}{%
+  \usebeamerfont{footline}%
+  \usebeamercolor[fg]{footline}%
+  \hspace{1em}%
+  \insertframenumber/\inserttotalframenumber
+}
+
+\title{Rethinking OCaml recursive values}
+\author{Alban Reynaud}
+\institute{Inria Saclay, équipe Parsifal, supersvisé par Gabriel Scherer}
+% \titlegraphic{}
+\date{4 Septembre 2018}
+
+\begin{document}
+
+\begin{frame}
+  \titlepage
+\end{frame}
+
+\begin{frame}
+  \tableofcontents
+\end{frame}
+
+\section{Introduction}
+
+\begin{frame}
+  \frametitle{Contexte}
+  \begin{itemize}
+    \item \mintinline{ocaml}|let rec f x = ... and g y = ...|
+    \item \mintinline{ocaml}|let rec x = 1 :: x|
+    \item \mintinline{ocaml}|let rec x = 1 + x|
+  \end{itemize}
+\end{frame}
+
+\begin{frame}
+  \frametitle{Motivations}
+  \begin{itemize}
+    \item Avant OCaml 4.06 : vérification à l'aide de règles \textit{ad hoc}.
+    \item Depuis : Système proposé par Jeremy Yallop.
+    \item Avantage : ressemble à un système de type
+    \item Inconvénient : trop complexe
+  \end{itemize}
+\end{frame}
+
+\begin{frame}
+  \frametitle{Mon stage}
+  \begin{itemize}
+    \item Exprimer le système de Jeremy sous la forme de règles d'inférence.
+    \item Concevoir et implémenter un nouveau système.
+    \item Également : correction d'un bug.
+  \end{itemize}
+\end{frame}
+
+\section{Système de Jeremy Yallop}
+
+\begin{frame}
+  \frametitle{Modes d'accès}
+  \begin{description}
+    \item[Deref] la variable est inspectée.
+
+      Exemple : \mintinline{ocaml}|x| dans \mintinline{ocaml}|x + 1|
+
+    \item<2->[Guarded] l'adresse de la variable est utilisée dans un constructeur.
+
+      Exemple : \mintinline{ocaml}|x| dans \mintinline{ocaml}|Some x| ou \mintinline{ocaml}|[x]|
+
+    \item<3->[Delayed] la variable est utilisée dans une expression qui sera évaluée
+      plus tard.
+
+      Exemple : \mintinline{ocaml}|x| dans \mintinline{ocaml}|fun () -> x|
+  \end{description}
+\end{frame}
+
+\begin{frame}
+  \frametitle{Ce qui devrait être autorisé}
+  \begin{itemize}
+    \item Les variables devraient être utilisées en mode $\Guarded$ ou
+      $\Delayed$
+    \item \mintinline{ocaml}|let rec f x = ... and g y = ...|
+    \item \mintinline{ocaml}|let rec x = 1 :: x|
+    \item \mintinline{ocaml}|let rec x = 1 + x|
+  \end{itemize}
+\end{frame}
+
+\begin{frame}
+  \frametitle{Système de Jeremy}
+  \begin{itemize}
+    \item types : $u ::= (x : m)*$
+    \item environnements : $\Gamma ::= (x: u)*$
+    \item déductions : $\Gamma \vdash e: u$
+  \end{itemize}
+\end{frame}
+
+\begin{frame}
+  \frametitle{Relations entre les modes}
+  \begin{itemize}
+    \item $\Deref > \Guarded > \Unguarded$
+    \item $m + m'$ : mode le plus contraignant
+    \item $u + u' : x \rightarrow u(x) + u'(x)$
+    \item $\Gamma + \Gamma' : x \rightarrow \Gamma(x) + \Gamma'(x)$
+  \end{itemize}
+\end{frame}
+
+\begin{frame}
+  \frametitle{Algorithme de vérification}
+  \begin{itemize}
+    \item<1-> \mintinline{ocaml}|let rec|~$x_1 = e_1~$~\mintinline{ocaml}|and ... and|~$x_n = e_n$
+    \item<2-> $\Gamma = (x_i: (x_i: \Guarded))*$
+    \item<3-> $\Gamma \vdash e_1: u_1$, ..., $\Gamma \vdash e_n: u_n$
+  \end{itemize}
+\end{frame}
+
+\begin{frame}
+  \frametitle{Exemple de règle}
+  \begin{mathpar}
+  \infer*
+    {\Gamma \vdash e_1: T_1 \\
+     \Gamma, x : T_1 \vdash e_2: T_2}
+    {\Gamma \vdash \tlet{x}{e_1}{e_2}: T_1 + T_2}
+  \end{mathpar}
+\end{frame}
+
+\section{Nouveau système}
+
+\begin{frame}
+  \frametitle{Présentation}
+  \begin{itemize}
+    \item type = mode
+    \item environnement : $\Gamma \vdash (x : m)*$
+    \item déductions : $\Gamma \vdash x : m$
+  \end{itemize}
+\end{frame}
+
+% TODO: réécrire ces deux sections
+\begin{frame}
+  \frametitle{Composition de modes}
+  \begin{itemize}
+
+    \item<1-> \mintinline{ocaml}|fun () -> x + 1|
+      \begin{itemize}
+        \item<2-> \mintinline{ocaml}|x| est utilisé en mode $\Deref$ dans
+          \mintinline{ocaml}|x + 1|
+        \item<3-> \mintinline{ocaml}|x + 1| est utilisé en mode $\Delayed$
+        \item<4-> \mintinline{ocaml}|x| est utilisé en mode $\Delayed$
+      \end{itemize}
+
+    \item<5-> \mintinline{ocaml}|Some(x + 1)|
+      \begin{itemize}
+        \item<6-> \mintinline{ocaml}|x| est utilisé en mode $\Deref$ dans
+          \mintinline{ocaml}|x + 1|
+        \item<7-> \mintinline{ocaml}|x + 1| est utilisé en mode $\Guarded$
+        \item<8-> \mintinline{ocaml}|x| est utilisé en mode $\Deref$
+      \end{itemize}
+
+  \end{itemize}
+\end{frame}
+
+\begin{frame}
+  \frametitle{Composition de modes}
+
+  \begin{itemize}
+    \item $e[e'[x]]$ : $x$ est utilisée en mode $m[m']$
+    \item Calcul :
+  \end{itemize}
+
+  \begin{displaymath}
+    \begin{array}{lll}
+      \Deref [m] & = & \Deref \\
+      \Delayed [m] & = & \Delayed \\
+      \Guarded [m] & = & m \\
+    \end{array}
+  \end{displaymath}
+\end{frame}
+
+\begin{frame}
+  \frametitle{Algorithme de vérification}
+  \begin{itemize}
+    \item<1-> \mintinline{ocaml}|let rec|~$x_1 = e_1~$~\mintinline{ocaml}|and ... and|~$x_n = e_n$
+    \item<2-> $\Gamma_1 \vdash e_1: \Guarded$, ...,
+              $\Gamma_n \vdash e_n: \Guarded$
+  \end{itemize}
+\end{frame}
+
+\begin{frame}
+  \frametitle{Exemple de règle}
+
+  \begin{mathpar}
+  \infer*{\Gamma_1 \vdash e_1: m' \\
+          \Gamma_2, x: m_x \vdash e_2: m}
+         {\Gamma_1 + \Gamma_2 \vdash \tlet{x}{e_1}{e_2}: m}
+  \end{mathpar}
+
+  \begin{itemize}
+    \item<2-> $m' \geq m[\Guarded]$
+    \item<3-> $m' \geq m[m_x]$
+    \item<4-> $m' = m[m_x + \Guarded]$
+  \end{itemize}
+\end{frame}
+
+\begin{frame}
+  \frametitle{Exemple de règle}
+
+  \begin{mathpar}
+  \infer*{\Gamma_1 \vdash e_1: m[m_x + \Guarded] \\
+          \Gamma_2, x: m_x \vdash e_2: m}
+         {\Gamma_1 + \Gamma_2 \vdash \tlet{x}{e_1}{e_2}: m}
+  \end{mathpar}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Implémentation}
+  \begin{mathpar}
+    \infer*
+      {\Gamma_c \vdash e_c: m[\Deref] \\
+       \Gamma_1 \vdash e_1: m       \\
+       \Gamma_2 \vdash e_2: m}
+      {\Gamma_c + \Gamma_1 + \Gamma_1 \vdash \tifthenelse{e_c}{e_1}{e_2}: m}
+  \end{mathpar}
+
+  \pause
+
+  \begin{minted}[fontsize=\scriptsize]{ocaml}
+let rec expression : mode -> Typedtree.expression -> Env.t =
+  fun mode exp -> match exp.exp_desc with
+    (* ... *)
+    | Texp_ifthenelse (cond, ifso, ifnot) ->
+      let env_cond = expression (compose mode Dereferenced)
+                                cond in
+      let env_ifso = expression mode ifso in
+      let env_ifnot = option expression mode ifnot in
+      Env.join env_cond (Env.join env_ifso env_ifnot)
+  \end{minted}
+\end{frame}
+
+\begin{frame}
+  \frametitle{Implémentation}
+  \begin{itemize}
+    \item Passe tous les tests
+    \item Une pull request a été soumise
+  \end{itemize}
+\end{frame}
+  
+\section*{Conclusion}
+
+\begin{frame}
+  \frametitle{Conclusion}
+  Pendant ce stage :
+  \begin{itemize}
+    \item j'ai relu et exprimé le système de Jeremy Yallop sous forme de règles
+      d'inférences
+    \item j'ai conçu et implémenté un nouveau système
+    \item j'ai également corrigé un bug du compilateur
+  \end{itemize}
+\end{frame}
+
+\begin{frame}
+  \frametitle{Perspectives}
+  \begin{itemize}
+    \item Possibilité de faire une preuve de la correction du système
+    \item Étendre le système
+    \item Utiliser les données pour la compilation
+  \end{itemize}
+\end{frame}
+
+\appendix
+\backupbegin
+
+\begin{frame}
+  \frametitle{Autres modes d'accès}
+  \begin{itemize}
+    \item Problème : que faire de la déclaration \mintinline{ocaml}|let rec x = x| ?
+    \item<2-> Mode $\Unguarded$ ($\Deref > \Unguarded > \Guarded$)
+    \item<3-> Également un mode $\Unused$ dans le nouveau système
+    \item<4-> Dans le système de Jeremy, les modes $\Guarded$, $\Delayed$ et
+      $\Unused$ sont confondus.
+  \end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+  \frametitle{Correction d'un bug}
+  \begin{itemize}
+    \item<1-> Possibilité de définir de classes :
+      \begin{minted}[mathescape=true]{ocaml}
+class c = object ... end
+class c = let x = e in ... [classexpr]
+      \end{minted}
+    \item<2-> Les expressions \mintinline{ocaml}|e| et
+      \mintinline{ocaml}|[classexpr]| étaient typées séparément.
+    \item<3-> 
+      \begin{minted}{ocaml}
+class c = let x () = new c in
+          let y = x () in
+          object end
+      \end{minted}
+  \end{itemize}
+\end{frame}
+
+\backupend
+
+\end{document}
